@@ -1,0 +1,34 @@
+[package]
+name = "termesh"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Terminal-native, agent-first IDE."
+
+[[bin]]
+name = "termesh"
+path = "src/main.rs"
+
+[dependencies]
+termesh-core.workspace = true
+termesh-editor.workspace = true
+termesh-agent.workspace = true
+termesh-ui.workspace = true
+termesh-config.workspace = true
+termesh-filesystem.workspace = true
+termesh-git.workspace = true
+termesh-lsp.workspace = true
+termesh-workspace.workspace = true
+termesh-platform.workspace = true
+termesh-syntax.workspace = true
+termesh-terminal.workspace = true
+termesh-search.workspace = true
+termesh-tasks.workspace = true
+termesh-test-support.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+ropey.workspace = true
+tracing.workspace = true
+

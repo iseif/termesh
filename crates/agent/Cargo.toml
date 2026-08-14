@@ -1,0 +1,23 @@
+[package]
+name = "termesh-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description.workspace = true
+
+[dependencies]
+termesh-core.workspace = true
+termesh-editor.workspace = true
+similar.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+ropey.workspace = true
+# Path-only on purpose: a dev-dependency carrying a version must resolve from the
+# registry at package time, and test-support depends on this crate transitively, so a
+# versioned edge here deadlocks publishing. Cargo strips path-only dev-deps from the
+# published manifest, which is exactly what we want.
+termesh-test-support = { path = "../test-support" }

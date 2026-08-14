@@ -1,0 +1,14 @@
+[package]
+name = "termesh-search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description.workspace = true
+
+[dependencies]
+termesh-core.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ignore.workspace = true

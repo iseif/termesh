@@ -1,0 +1,20 @@
+[package]
+name = "termesh-test-support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description.workspace = true
+
+[dependencies]
+termesh-filesystem.workspace = true
+termesh-git.workspace = true
+termesh-lsp.workspace = true
+termesh-agent.workspace = true
+termesh-core.workspace = true
+termesh-terminal.workspace = true
+termesh-platform.workspace = true
+termesh-search.workspace = true
+termesh-tasks.workspace = true
+termesh-workspace.workspace = true

@@ -1,0 +1,83 @@
+# Support boundaries for 0.1.0
+
+Termesh 0.1.0 is a public beta. This page states what is exercised, what is expected to
+work, and where the current boundary is. It is a compatibility description, not a paid-support
+promise.
+
+## Platforms and terminals
+
+The full format, lint, test, and debug-build gate runs in GitHub Actions on Ubuntu, macOS, and
+Windows. The release workflow is configured for these artifacts; its credentialed five-target
+dispatch is an owner verification step before release:
+
+| Operating system | Architecture | Validation |
+|---|---|---|
+| Linux (GNU) | x86-64 | Full CI gate; release-workflow target |
+| Linux (GNU) | AArch64 | Cross-compiled release-workflow target |
+| macOS | x86-64 | Release-workflow target |
+| macOS | Apple Silicon | Full CI gate; locally exercised release build; release-workflow target |
+| Windows | x86-64 (MSVC) | Builds and passes the unit and integration suite in CI; **PTY teardown unverified — see below**; release-workflow target |
+
+Automated coverage includes Crossterm input, real pseudo-terminal integration tests (on Linux and
+macOS — see the Windows note below), recorded VT streams, 60-column snapshots, 16-colour rendering,
+and `NO_COLOR`. No named terminal emulator has
+a recorded manual certification yet, so 0.1.0 does not claim one. A standards-compatible terminal
+that Crossterm supports is expected to work, including over SSH; please report the emulator,
+version, operating system, `$TERM`, and colour-related environment variables with terminal bugs.
+
+## Language tiers
+
+Language servers are external programs. None is bundled, downloaded, or updated by Termesh.
+
+| Tier | Languages | Required server | Meaning |
+|---|---|---|---|
+| Tier 1 | Rust | `rust-analyzer` | Built-in recipe plus unit, integration, and UI coverage |
+| Tier 1 | TypeScript / JavaScript | `typescript-language-server` | Built-in recipe plus unit, integration, and UI coverage |
+| Tier 1 | Python | `pyright-langserver` (from Pyright) | Built-in recipe plus unit, integration, and UI coverage |
+| Tier 1 | Java | `jdtls` (Eclipse JDT LS launcher) | Built-in recipe plus unit, integration, and UI coverage |
+| Best effort | Other LSP-capable languages | A server configured through the generic LSP path | Protocol path may work, but no recipe or compatibility tests ship in 0.1.0 |
+
+The server executable must be on `PATH`, unless a workspace override supplies an explicit command.
+See [language-servers.md](language-servers.md) for installation and override examples.
+
+**Tier 1 describes language-server support, not syntax highlighting.** Highlighting ships one
+tree-sitter grammar, Rust, so a TypeScript, Python, or Java file gets diagnostics, navigation,
+symbols, rename, and formatting, but is displayed as plain text. Highlighting is cosmetic and the
+language-server path is not, which is why the two were allowed to advance separately; additional
+grammars are post-beta work.
+
+## Known limitations
+
+- An ACP agent session does not survive restart. The client restores workspaces, buffers, the
+  active tab, pane geometry, terminal working directories, and read-only transcript history, then
+  starts a fresh agent session. The implemented ACP baseline has no usable session-load path;
+  pretending replay was a resumed session would be unsafe (ADR-0014 §4).
+- User-authored `themes/` are deferred. The token layer and compiled dark, 16-colour, and no-colour
+  palettes exist, but a theme-file loader would be isolated scope with no `0.1.0` consumer
+  (ADR-0014 §1). The `soft_wrap` config key is likewise recognized and diagnosed but not applied;
+  correct wrapping requires the editor viewport and decoration model to become wrap-aware.
+- A multi-file LSP rename validates the whole edit before mutation, but undo is per file rather
+  than one atomic workspace-wide action because each buffer owns its transaction history
+  (ADR-0011 §7).
+- Completion is explicitly invoked (`Alt+/` by default), not requested after every keystroke. This
+  keeps the beta's request and cancellation model deterministic.
+- A Java compiler error may appear once from JDT LS and once from `javac`. Deduplicating only by
+  path, line, and severity would incorrectly merge distinct same-line diagnostics in other
+  languages, so 0.1.0 keeps both rows (ADR-0014 §7).
+- **Windows terminals are best-effort in 0.1.0, not Tier 1.** The whole test suite passes on
+  Windows except pseudo-terminal teardown, which is unverified: in CI, `child.wait()` on a ConPTY
+  child does not return promptly after the process exits, so closing a terminal can report a kill
+  timeout (OS error 1460) and the exit event may not arrive. Everything else — editing, search,
+  Git, tasks, language servers, and the agent loop — is covered by the same tests as the other
+  platforms. The three affected tests are marked `#[ignore]` on Windows rather than deleted, so
+  `cargo test -- --ignored` reproduces the behaviour on a Windows host. Diagnosing it needs one;
+  no fix is guessed at from CI output.
+- There is no debugger, plugin system, or parallel/multi-agent orchestration in 0.1.0. Those are
+  post-beta platform work, not partial beta features (ARCHITECTURE §15–§16).
+
+## What beta means
+
+Bug reports and focused compatibility reports are welcome. The configuration schema may change
+within the migration contract documented in [configuration.md](configuration.md): known data is
+loaded forward where possible, migrations happen in memory, and reading a file never rewrites it.
+There is no support response-time or long-term compatibility commitment for 0.1.x.

@@ -1,0 +1,30 @@
+# cargo-deny configuration (dependency & license audit).
+# Run: cargo deny check
+[licenses]
+# All permissive and compatible with this project's MIT OR Apache-2.0 dual licence.
+#
+# `CC0-1.0` is `notify`'s licence, a public-domain dedication. `Unicode-3.0` superseded
+# `Unicode-DFS-2016` — which is why the old identifier matched nothing — and `unicode-ident`
+# now declares `(MIT OR Apache-2.0) AND Unicode-3.0`. Both were missing, so this audit could
+# not have passed once it started running at all.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+
+[advisories]
+yanked = "deny"
+
+[sources]
+unknown-registry = "deny"
