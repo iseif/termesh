@@ -45,7 +45,7 @@ impl RealSearch {
                 "real::tests::fake_rg_helper".into(),
                 "--nocapture".into(),
             ],
-            env: vec![("TERMIDE_FAKE_RG_MODE".into(), mode.into())],
+            env: vec![("TERMESH_FAKE_RG_MODE".into(), mode.into())],
             append_search_args: false,
         }
     }
@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn fake_rg_helper() {
-        match std::env::var("TERMIDE_FAKE_RG_MODE").as_deref() {
+        match std::env::var("TERMESH_FAKE_RG_MODE").as_deref() {
             Ok("lines") => {
                 println!("src/lib.rs");
                 println!("src/main.rs");

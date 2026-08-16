@@ -6,6 +6,12 @@ license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 description = "Terminal-native, agent-first IDE."
+readme.workspace = true
+# Only the binary crate carries these. The other fifteen are published because this one
+# depends on them; filing library plumbing under "text editors" would put it in front of
+# people looking for an editor. Both slugs are real crates.io categories.
+keywords = ["ide", "editor", "terminal", "tui", "agent"]
+categories = ["command-line-utilities", "text-editors"]
 
 [[bin]]
 name = "termesh"

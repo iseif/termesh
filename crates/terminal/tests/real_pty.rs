@@ -19,7 +19,7 @@ fn real_pty_runs_the_current_test_binary() {
         program: exe.to_string_lossy().into_owned(),
         args: vec!["--exact".into(), "pty_helper_child".into(), "--nocapture".into()],
         cwd: std::env::current_dir().unwrap(),
-        env: vec![("TERMIDE_PTY_HELPER".into(), "1".into())],
+        env: vec![("TERMESH_PTY_HELPER".into(), "1".into())],
     };
     let terminal = TerminalId::new(1);
     let (tx, rx) = mpsc::channel();
@@ -81,7 +81,7 @@ fn exit_is_emitted_only_after_final_pty_output() {
         program: exe.to_string_lossy().into_owned(),
         args: vec!["--exact".into(), "pty_helper_child".into(), "--nocapture".into()],
         cwd: std::env::current_dir().unwrap(),
-        env: vec![("TERMIDE_PTY_BURST".into(), "1".into())],
+        env: vec![("TERMESH_PTY_BURST".into(), "1".into())],
     };
     let terminal = TerminalId::new(2);
     let (tx, rx) = mpsc::channel();
@@ -134,7 +134,7 @@ fn a_blocked_output_callback_cannot_be_overtaken_by_exit() {
         program: exe.to_string_lossy().into_owned(),
         args: vec!["--exact".into(), "pty_helper_child".into(), "--nocapture".into()],
         cwd: std::env::current_dir().unwrap(),
-        env: vec![("TERMIDE_PTY_BLOCKED".into(), "1".into())],
+        env: vec![("TERMESH_PTY_BLOCKED".into(), "1".into())],
     };
     let terminal = TerminalId::new(5);
     let (tx, rx) = mpsc::channel();
@@ -263,11 +263,11 @@ fn exited_is_bounded_when_a_descendant_keeps_the_pty_open() {
 
 #[test]
 fn pty_helper_child() {
-    if std::env::var_os("TERMIDE_PTY_BLOCKED").is_some() {
+    if std::env::var_os("TERMESH_PTY_BLOCKED").is_some() {
         println!("blocked-output-marker");
         return;
     }
-    if std::env::var_os("TERMIDE_PTY_BURST").is_some() {
+    if std::env::var_os("TERMESH_PTY_BURST").is_some() {
         let mut stdout = std::io::stdout().lock();
         for _ in 0..64 {
             stdout.write_all(&[b'x'; 1024]).unwrap();
@@ -276,7 +276,7 @@ fn pty_helper_child() {
         stdout.flush().unwrap();
         return;
     }
-    if std::env::var_os("TERMIDE_PTY_HELPER").is_some() {
+    if std::env::var_os("TERMESH_PTY_HELPER").is_some() {
         let mut line = String::new();
         std::io::stdin().lock().read_line(&mut line).unwrap();
         println!("pty-helper-ok:{}", line.trim());

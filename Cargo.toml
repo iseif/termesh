@@ -11,6 +11,10 @@ license = "MIT OR Apache-2.0"
 rust-version = "1.88"
 repository = "https://github.com/iseif/termesh"
 description = "Internal component of a terminal-native, agent-first IDE."
+# Inherited by every crate: the internal ones are published only because the binary
+# depends on them, and a crates.io page with no body cannot tell a reader that. The
+# path is resolved against this file, so each package gets its own copy of the README.
+readme = "README.md"
 
 [workspace.dependencies]
 # --- internal crates ---

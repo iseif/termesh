@@ -177,7 +177,7 @@ impl Cli {
 pub const VERSION_LINE: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 
 pub fn version_line() -> String {
-    let commit = option_env!("TERMIDE_GIT_COMMIT")
+    let commit = option_env!("TERMESH_GIT_COMMIT")
         .or(option_env!("GITHUB_SHA"))
         .unwrap_or("unknown")
         .chars()

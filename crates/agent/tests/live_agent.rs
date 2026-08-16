@@ -5,7 +5,7 @@
 //! a test that silently skips is worse than one you have to ask for:
 //!
 //! ```text
-//! TERMIDE_TEST_AGENT="opencode acp" cargo test -p termesh-agent --test live_agent -- --ignored --nocapture
+//! TERMESH_TEST_AGENT="opencode acp" cargo test -p termesh-agent --test live_agent -- --ignored --nocapture
 //! ```
 //!
 //! No prompt is sent, so no model is invoked and nothing is billed: this exercises the
@@ -18,9 +18,9 @@ use std::time::Duration;
 use termesh_agent::service::{AgentEvent, AgentRequest, AgentService, ClientCapabilities};
 use termesh_agent::AcpAgent;
 
-/// The agent command, as argv, from `TERMIDE_TEST_AGENT`.
+/// The agent command, as argv, from `TERMESH_TEST_AGENT`.
 fn command() -> Option<Vec<String>> {
-    let raw = std::env::var("TERMIDE_TEST_AGENT").ok()?;
+    let raw = std::env::var("TERMESH_TEST_AGENT").ok()?;
     let argv: Vec<String> = raw.split_whitespace().map(str::to_string).collect();
     if argv.is_empty() {
         return None;
@@ -29,10 +29,10 @@ fn command() -> Option<Vec<String>> {
 }
 
 #[test]
-#[ignore = "needs a real ACP agent; set TERMIDE_TEST_AGENT"]
+#[ignore = "needs a real ACP agent; set TERMESH_TEST_AGENT"]
 fn a_real_agent_completes_the_handshake_and_opens_a_session() {
     let Some(argv) = command() else {
-        panic!("set TERMIDE_TEST_AGENT, e.g. TERMIDE_TEST_AGENT=\"opencode acp\"");
+        panic!("set TERMESH_TEST_AGENT, e.g. TERMESH_TEST_AGENT=\"opencode acp\"");
     };
     let cwd = std::env::temp_dir();
 
