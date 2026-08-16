@@ -208,6 +208,7 @@ One Cargo workspace; widgets and the agent reach the OS only through service tra
 - [docs/tasks.md](docs/tasks.md) — adapter discovery, workspace tasks, and navigable output
 - [docs/configuration.md](docs/configuration.md) — global settings, keymap grammar, and migration
 - [docs/support.md](docs/support.md) — tested platforms, language tiers, and beta limitations
+- [CHANGELOG.md](CHANGELOG.md) — what shipped in each release
 - [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 ## Naming
