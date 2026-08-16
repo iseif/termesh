@@ -48,6 +48,20 @@ grammars are post-beta work.
 
 ## Known limitations
 
+- **The 0.1.0 macOS binaries are not signed with a Developer ID, and are not notarized.** They
+  carry only the ad-hoc signature the linker applies, so `codesign --verify` passes but
+  `spctl --assess` rejects them. This matters exactly when macOS attaches the quarantine attribute,
+  which is to say a download through a browser: the first launch is refused with a message about
+  an unidentified developer or a damaged file. Clear it once per download:
+
+  ```bash
+  xattr -d com.apple.quarantine ./termesh
+  ```
+
+  `cargo install termesh` compiles locally and is unaffected, as is any download made with `curl`
+  or `wget`, which do not set the attribute. Signing is a release-infrastructure gap rather than a
+  code one — the release workflow already signs and notarizes when the credentials are present —
+  and it is intended to close before the next release.
 - An ACP agent session does not survive restart. The client restores workspaces, buffers, the
   active tab, pane geometry, terminal working directories, and read-only transcript history, then
   starts a fresh agent session. The implemented ACP baseline has no usable session-load path;

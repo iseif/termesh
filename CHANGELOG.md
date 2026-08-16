@@ -56,6 +56,9 @@ terminal that the human is already looking at.
 Read [docs/support.md](docs/support.md) before relying on this. The boundaries that will affect
 people most:
 
+- **The macOS binaries are not signed or notarized.** A browser download is quarantined and
+  refused on first launch; clear it with `xattr -d com.apple.quarantine ./termesh`. Installing
+  with `cargo install`, `curl`, or `wget` is unaffected.
 - **Windows is best-effort, not Tier 1.** Everything passes on Windows except pseudo-terminal
   teardown, which is unverified: closing a terminal can report a kill timeout (OS error 1460) and
   the exit event may not arrive. The three affected tests are marked `#[ignore]` on Windows rather
