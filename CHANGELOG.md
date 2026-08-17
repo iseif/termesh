@@ -4,6 +4,23 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
+## Unreleased
+
+### Fixed
+
+- **A `.gitignore` rule naming a directory hid only the directory, not the files under it.**
+  The explorer never showed the difference, because it asks about a directory before descending
+  and stops there. The file watcher did: it receives deep paths from the OS, so on a Rust project
+  every file cargo wrote under `target/` counted as a change and reached the language server as a
+  watched-file notification. rust-analyzer then re-analysed, which runs `cargo check`, which
+  writes to `target/` again — so it never settled, the status bar cycled through its phases
+  indefinitely, and the error count flipped between the real value and zero. Ignored directories
+  now hide their contents.
+- **The status bar reported `LSP indexing` forever.** Servers report work as a begin/report/end
+  stream per token, and every notification was read as "still working" — including the `end` that
+  means finished. The indicator now clears when the last outstanding unit of work ends, and still
+  shows progress while any remains.
+
 ## 0.1.2 — 2026-08-17
 
 ### Fixed

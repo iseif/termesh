@@ -134,25 +134,6 @@
     padding: 0.08rem 0.35rem;
     font-size: 0.85rem;
   }
-  /* The frames are 96 columns of box-drawing characters. They must never wrap, so
-     they scroll inside their own box rather than widening the page. */
-  .frame {
-    background: var(--term-bg);
-    color: var(--term-ink);
-    border-radius: 9px;
-    padding: 1rem 1.1rem;
-    overflow-x: auto;
-    border: 1px solid var(--rule);
-  }
-  .frame pre {
-    margin: 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 11px;
-    line-height: 1.35;
-    white-space: pre;
-  }
-  @media (min-width: 60rem) { .frame pre { font-size: 12.5px; } }
-
   ul.plain { padding-left: 1.1rem; color: var(--muted); }
   ul.plain li { margin-bottom: 0.5rem; }
   ul.plain strong { color: var(--ink); }
@@ -250,28 +231,14 @@
     </figure>
 
     <p class="lede">
-      Nothing above needs taking on trust. The same interface renders headlessly, with no terminal,
-      no language server and no agent involved — this frame was produced while the page was built:
+      Nothing above needs taking on trust. The same interface renders headlessly — no terminal, no
+      language server, no agent — and comes out byte-identical on any machine:
     </p>
 
-    <figure>
-      <figcaption><code>termesh --dump-frame . --lsp-demo</code></figcaption>
-      <div class="frame"><pre>{{FRAME_LSP}}</pre></div>
-    </figure>
-  </section>
+<pre class="code">termesh --dump-frame . --lsp-demo        # a diagnostic, a hover, the error count
+termesh --dump-frame . --git-demo        # conflicts, staged and worktree groups
+termesh --dump-frame . --agent-demo --open README.md</pre>
 
-<section>
-  <div class="wrap">
-    <h2>Integration is tiered, so the bet is de-risked</h2>
-    <ul class="plain">
-      <li><strong>Tier 0 — any AI CLI, free.</strong> Run it inside a managed terminal pane. No
-      agent-specific code at all; it works because the terminal works.</li>
-      <li><strong>Tier 1 — native ACP.</strong> Shared project context, inline diff review of
-      proposed edits, and permission-gated command execution that shows you the exact program,
-      argv, cwd and environment before anything runs.</li>
-    </ul>
-    <p class="lede">Both ship today. The tiering exists so the product stays useful where the hard
-    one cannot reach.</p>
   </div>
 </section>
 

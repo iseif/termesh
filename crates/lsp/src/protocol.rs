@@ -55,6 +55,13 @@ pub struct Translator {
     external_to_wire: HashMap<LspRequestId, u64>,
     cancelled: HashSet<u64>,
     queued: Vec<LspRequest>,
+    /// Progress tokens the server has begun and not yet ended.
+    ///
+    /// `$/progress` is a stream of begin/report/end per token, and rust-analyzer runs
+    /// several at once — fetching metadata, scanning roots, indexing. Treating every
+    /// notification as "still working" left the status bar reporting indexing forever,
+    /// because nothing was listening for the end.
+    active_progress: HashSet<String>,
 }
 
 impl Default for Translator {
@@ -65,6 +72,7 @@ impl Default for Translator {
             pending: HashMap::new(),
             external_to_wire: HashMap::new(),
             cancelled: HashSet::new(),
+            active_progress: HashSet::new(),
             queued: Vec::new(),
         }
     }
@@ -154,7 +162,7 @@ impl Translator {
                 (Vec::new(), vec![answer_client_request(id, &method, &params)])
             }
             Message::Notification { method, params } => {
-                (notification_events(&method, &params), Vec::new())
+                (self.notification_events(&method, &params), Vec::new())
             }
             Message::Response { id, result } => self.response(id, Ok(result)),
             Message::Error { id, code, message } => self.response(id, Err((code, message))),
@@ -396,12 +404,51 @@ fn answer_client_request(id: u64, method: &str, params: &Value) -> Message {
     }
 }
 
-fn notification_events(method: &str, params: &Value) -> Vec<LspEvent> {
-    match method {
-        "textDocument/publishDiagnostics" => parse_diagnostics(params).into_iter().collect(),
-        "$/progress" => parse_progress(params).into_iter().collect(),
-        "language/status" => vec![parse_jdt_language_status(params)],
-        _ => Vec::new(),
+impl Translator {
+    fn notification_events(&mut self, method: &str, params: &Value) -> Vec<LspEvent> {
+        match method {
+            "textDocument/publishDiagnostics" => parse_diagnostics(params).into_iter().collect(),
+            "$/progress" => self.progress_events(params),
+            "language/status" => vec![parse_jdt_language_status(params)],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Turn one `$/progress` notification into a load-state change.
+    ///
+    /// Only the *last* token ending means the server is done, so an `end` while other work
+    /// is outstanding reports nothing and leaves the existing status alone.
+    fn progress_events(&mut self, params: &Value) -> Vec<LspEvent> {
+        let Some(indexing) = parse_progress(params) else { return Vec::new() };
+
+        // A server that sends no token cannot be tracked; report it as work in progress,
+        // which is what this did for every notification before.
+        let Some(token) = progress_token(params) else { return vec![indexing] };
+
+        match params.get("value").and_then(|v| v.get("kind")).and_then(Value::as_str) {
+            Some("end") => {
+                self.active_progress.remove(&token);
+                if self.active_progress.is_empty() {
+                    vec![LspEvent::Ready]
+                } else {
+                    Vec::new()
+                }
+            }
+            _ => {
+                self.active_progress.insert(token);
+                vec![indexing]
+            }
+        }
+    }
+}
+
+/// The token identifying one unit of server-side work. It is a string or a number on the
+/// wire; either is fine as long as begin and end agree, so both become a string.
+fn progress_token(params: &Value) -> Option<String> {
+    match params.get("token")? {
+        Value::String(token) => Some(token.clone()),
+        Value::Number(token) => Some(token.to_string()),
+        _ => None,
     }
 }
 
@@ -967,6 +1014,48 @@ mod tests {
             }),
         });
         assert!(matches!(events.as_slice(), [LspEvent::Indexing { percent: Some(42), .. }]));
+    }
+
+    /// The status bar said "LSP indexing" for as long as the editor stayed open, on every
+    /// project. Progress arrives as begin/report/end per token and every one of them was
+    /// read as "still working", so the end — the only notification that means finished —
+    /// kept the session in the same state it was trying to leave.
+    #[test]
+    fn the_last_progress_token_to_end_reports_the_server_ready() {
+        let mut t = ready_translator();
+        let progress = |token: &str, kind: &str| Message::Notification {
+            method: "$/progress".into(),
+            params: serde_json::json!({
+                "token": token,
+                "value": {"kind": kind, "message": "indexing", "percentage": 10}
+            }),
+        };
+
+        // rust-analyzer runs several units of work at once.
+        let (events, _) = t.incoming(progress("roots", "begin"));
+        assert!(matches!(events.as_slice(), [LspEvent::Indexing { .. }]));
+        let (events, _) = t.incoming(progress("indexing", "begin"));
+        assert!(matches!(events.as_slice(), [LspEvent::Indexing { .. }]));
+
+        // One finishing is not the server finishing.
+        let (events, _) = t.incoming(progress("roots", "end"));
+        assert!(events.is_empty(), "work is still outstanding: {events:?}");
+
+        let (events, _) = t.incoming(progress("indexing", "end"));
+        assert_eq!(events.as_slice(), [LspEvent::Ready], "the last one is");
+    }
+
+    /// Not every server announces a token. Before tracking them, every notification meant
+    /// "working"; that stays true when there is nothing to track, rather than the status
+    /// silently never appearing.
+    #[test]
+    fn progress_without_a_token_still_reports_work() {
+        let mut t = ready_translator();
+        let (events, _) = t.incoming(Message::Notification {
+            method: "$/progress".into(),
+            params: serde_json::json!({ "value": {"kind": "report", "message": "loading"} }),
+        });
+        assert!(matches!(events.as_slice(), [LspEvent::Indexing { .. }]));
     }
 
     #[test]
