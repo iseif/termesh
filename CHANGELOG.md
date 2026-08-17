@@ -14,6 +14,16 @@ described in [docs/configuration.md](docs/configuration.md).
   commit now prints the version and stops. Release binaries are unchanged and still carry the
   short commit.
 
+### Changed
+
+- **The macOS binaries are now signed with a Developer ID certificate and notarized by Apple**,
+  with the hardened runtime and a secure timestamp. A browser download no longer needs
+  `xattr -d com.apple.quarantine` — verified by quarantining a build exactly as Safari does and
+  running it, against the 0.1.0 binary given the same treatment, which Gatekeeper kills. The
+  release workflow signs whenever the credentials are present and now refuses a half-configured
+  setup, because signing without notarizing produces a binary Gatekeeper still rejects from a run
+  that otherwise looks successful. The Windows binaries remain unsigned.
+
 ## 0.1.1 — 2026-08-17
 
 ### Fixed

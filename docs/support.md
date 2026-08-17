@@ -25,6 +25,30 @@ a recorded manual certification yet, so 0.1.0 does not claim one. A standards-co
 that Crossterm supports is expected to work, including over SSH; please report the emulator,
 version, operating system, `$TERM`, and colour-related environment variables with terminal bugs.
 
+## Signing
+
+The macOS binaries are signed with a Developer ID Application certificate and notarized by Apple,
+with the hardened runtime enabled and a secure timestamp. A download through a browser carries the
+quarantine attribute and runs without a Gatekeeper prompt; no `xattr` workaround is needed. Verify
+a downloaded copy yourself:
+
+```bash
+codesign --verify --strict --verbose=2 ./termesh
+codesign --verify --test-requirement="=notarized" ./termesh
+```
+
+A standalone executable cannot carry a stapled notarization ticket — stapling targets bundles,
+disk images, and installer packages — so Gatekeeper resolves the ticket online the first time the
+binary runs. On a machine with no network at that moment, launching may be refused until it can
+check once. This is ordinary for a notarized command-line tool.
+
+`spctl --assess --type execute` reports `rejected (the code is valid but does not seem to be an
+app)` for these binaries. That is `spctl` objecting to a bare executable rather than an app bundle,
+not a notarization failure; the `=notarized` requirement above is the check that answers the
+question.
+
+The Windows binaries are unsigned. Every release publishes `SHA256SUMS`.
+
 ## Language tiers
 
 Language servers are external programs. None is bundled, downloaded, or updated by Termesh.
@@ -48,20 +72,9 @@ grammars are post-beta work.
 
 ## Known limitations
 
-- **The 0.1.0 macOS binaries are not signed with a Developer ID, and are not notarized.** They
-  carry only the ad-hoc signature the linker applies, so `codesign --verify` passes but
-  `spctl --assess` rejects them. This matters exactly when macOS attaches the quarantine attribute,
-  which is to say a download through a browser: the first launch is refused with a message about
-  an unidentified developer or a damaged file. Clear it once per download:
-
-  ```bash
-  xattr -d com.apple.quarantine ./termesh
-  ```
-
-  `cargo install termesh` compiles locally and is unaffected, as is any download made with `curl`
-  or `wget`, which do not set the attribute. Signing is a release-infrastructure gap rather than a
-  code one — the release workflow already signs and notarizes when the credentials are present —
-  and it is intended to close before the next release.
+- **The Windows binaries are not signed.** SmartScreen may warn on first run, and the warning is
+  dismissible. `SHA256SUMS` on each release is the way to confirm you have the file this project
+  published. The macOS binaries *are* signed and notarized — see below.
 - An ACP agent session does not survive restart. The client restores workspaces, buffers, the
   active tab, pane geometry, terminal working directories, and read-only transcript history, then
   starts a fresh agent session. The implemented ACP baseline has no usable session-load path;
