@@ -16,6 +16,37 @@ The terminal already has great focused tools (Helix, Zellij, Yazi, lazygit) and 
 - **ACP-first, agent-agnostic.** We implement the client side of the open Agent Client Protocol. Bring your own agent and model; we never marry one vendor.
 - **Terminal-native and remote-first.** GUI agent IDEs (Zed, JetBrains) can't follow you onto a bare SSH box. This does.
 
+## Install
+
+```bash
+cargo install termesh --locked
+```
+
+Or take a prebuilt binary from the [latest release](https://github.com/iseif/termesh/releases/latest)
+— Linux (x86-64, AArch64), macOS (Intel, Apple Silicon) and Windows (x86-64), each with
+`SHA256SUMS`:
+
+```bash
+# macOS (Apple Silicon) — adjust the target for your platform
+curl -fsSL -o termesh.tar.gz \
+  https://github.com/iseif/termesh/releases/latest/download/termesh-aarch64-apple-darwin.tar.gz
+tar -xzf termesh.tar.gz
+sudo mv termesh-aarch64-apple-darwin/termesh /usr/local/bin/
+termesh --version
+```
+
+The macOS binaries are signed with a Developer ID certificate and notarized, so a download runs
+without a Gatekeeper prompt. The Windows binaries are unsigned; verify them against `SHA256SUMS`.
+
+Then:
+
+```bash
+termesh .        # open a project
+termesh          # reopen the last one
+```
+
+Building from source instead is [described below](#build-from-source).
+
 ## What it looks like
 
 Real output, not a mock — and reproducible on your machine, with no terminal, no language server,
@@ -103,8 +134,9 @@ Both ship in `0.1.0`. The tiering exists so the product stays useful even where 
 
 ## Status & roadmap
 
-`0.1.0` is the first public release. Everything described on this page works today; the
-[support boundaries](docs/support.md) say where the edges are.
+This is a public beta. Everything described on this page works today; the
+[support boundaries](docs/support.md) say where the edges are, and the
+[changelog](CHANGELOG.md) records what each release changed.
 
 Next, in rough order: parallel and multi-agent sessions, a DAP debugger, a plugin SDK, more
 language recipes, and remote/SSH profiles. [ARCHITECTURE.md §16](ARCHITECTURE.md) has the detail,

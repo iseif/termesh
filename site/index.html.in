@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>termesh — a terminal-native, agent-first IDE</title>
+<meta name="description" content="A terminal-native IDE where the AI coding agent shares your buffers, diagnostics, git diff and terminal output, and proposes edits as reviewable inline diffs.">
+<meta property="og:title" content="termesh">
+<meta property="og:description" content="A terminal-native, agent-first IDE. Agent edits arrive as reviewable inline diffs, not a chat box bolted to the side.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://iseif.github.io/termesh/">
+<style>
+  /* Light is the base; dark redefines only the tokens, so no colour is defined
+     exclusively inside a media query. */
+  :root {
+    --bg: #fbfaf8;
+    --panel: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #5c5a55;
+    --rule: #e3e0da;
+    --accent: #b3005e;
+    --term-bg: #262335;
+    --term-ink: #e5e1f0;
+    --term-accent: #ff79c6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17161c;
+      --panel: #1e1d25;
+      --ink: #ece9f2;
+      --muted: #a09cae;
+      --rule: #2f2d3a;
+      --accent: #ff79c6;
+      --term-bg: #100f16;
+      --term-ink: #e5e1f0;
+      --term-accent: #ff79c6;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17161c;
+    --panel: #1e1d25;
+    --ink: #ece9f2;
+    --muted: #a09cae;
+    --rule: #2f2d3a;
+    --accent: #ff79c6;
+    --term-bg: #100f16;
+    --term-ink: #e5e1f0;
+    --term-accent: #ff79c6;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; padding: 0 1.25rem; }
+  a { color: var(--accent); }
+
+  header { padding: 4.5rem 0 2.5rem; border-bottom: 1px solid var(--rule); }
+  h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 7vw, 4rem);
+    letter-spacing: -0.03em;
+    font-weight: 680;
+  }
+  .tagline {
+    margin: 0.85rem 0 0;
+    font-size: clamp(1.1rem, 2.6vw, 1.45rem);
+    color: var(--muted);
+    max-width: 40rem;
+  }
+  .tagline strong { color: var(--ink); font-weight: 600; }
+
+  .cta { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 2rem; align-items: center; }
+  .btn {
+    display: inline-block;
+    padding: 0.6rem 1.1rem;
+    border-radius: 7px;
+    border: 1px solid var(--rule);
+    background: var(--panel);
+    color: var(--ink);
+    text-decoration: none;
+    font-weight: 550;
+    font-size: 0.95rem;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .install {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9rem;
+    padding: 0.6rem 0.9rem;
+    border-radius: 7px;
+    border: 1px solid var(--rule);
+    background: var(--panel);
+    color: var(--muted);
+    white-space: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .install b { color: var(--ink); font-weight: 600; }
+
+  section { padding: 3.25rem 0; border-bottom: 1px solid var(--rule); }
+  h2 {
+    font-size: 1.5rem;
+    letter-spacing: -0.015em;
+    margin: 0 0 0.4rem;
+  }
+  .lede { color: var(--muted); margin: 0 0 1.75rem; max-width: 44rem; }
+
+  .points { display: grid; gap: 1.4rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+  .point h3 { margin: 0 0 0.35rem; font-size: 1rem; }
+  .point p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+  figure { margin: 0 0 2rem; }
+  figcaption {
+    color: var(--muted);
+    font-size: 0.88rem;
+    margin-bottom: 0.6rem;
+  }
+  figcaption code {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.08rem 0.35rem;
+    font-size: 0.85rem;
+  }
+  /* The frames are 96 columns of box-drawing characters. They must never wrap, so
+     they scroll inside their own box rather than widening the page. */
+  .frame {
+    background: var(--term-bg);
+    color: var(--term-ink);
+    border-radius: 9px;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    border: 1px solid var(--rule);
+  }
+  .frame pre {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.35;
+    white-space: pre;
+  }
+  @media (min-width: 60rem) { .frame pre { font-size: 12.5px; } }
+
+  ul.plain { padding-left: 1.1rem; color: var(--muted); }
+  ul.plain li { margin-bottom: 0.5rem; }
+  ul.plain strong { color: var(--ink); }
+
+  pre.code {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.86rem;
+    margin: 0 0 1rem;
+  }
+
+  footer { padding: 2.5rem 0 4rem; color: var(--muted); font-size: 0.9rem; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>termesh</h1>
+    <p class="tagline">
+      A terminal-native, <strong>agent-first</strong> IDE. The AI coding agent shares your open
+      buffers, diagnostics, git diff and terminal output — and proposes edits as
+      <strong>reviewable inline diffs</strong>, not a chat box bolted to the side.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/iseif/termesh">GitHub</a>
+      <a class="btn" href="https://github.com/iseif/termesh/releases/latest">Download {{VERSION}}</a>
+      <a class="btn" href="https://crates.io/crates/termesh">crates.io</a>
+      <span class="install"><b>cargo install termesh --locked</b></span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Why this exists</h2>
+    <p class="lede">
+      The terminal already has excellent focused tools. Rebuilding those adds nothing. The part
+      nobody has built well in a terminal is the agent being a structural peer rather than a
+      sidebar.
+    </p>
+    <div class="points">
+      <div class="point">
+        <h3>The agent edits through the same spine you do</h3>
+        <p>Human and agent drive one action registry and one transaction-based edit path. Proposals
+        arrive as diffs in the editor — accept, reject, or accept per hunk. Nothing reaches disk
+        until you accept, and a hunk you edited inside is flagged rather than overwritten.</p>
+      </div>
+      <div class="point">
+        <h3>Agent-agnostic, by protocol</h3>
+        <p>An <a href="https://agentclientprotocol.com">ACP</a> client, so Claude Code, Codex,
+        Gemini CLI, OpenCode or Goose all plug in. Bring your own agent and model; no vendor is
+        assumed or bundled.</p>
+      </div>
+      <div class="point">
+        <h3>It follows you onto a bare SSH box</h3>
+        <p>GUI agent IDEs cannot. This runs anywhere a terminal runs — SSH, containers, minimal
+        servers — and degrades cleanly to 16 colours or none.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What it actually looks like</h2>
+    <p class="lede">
+      Every frame below is real program output, rendered while this page was built — not a
+      screenshot and not a drawing. Each one is reproducible on your machine with no terminal, no
+      language server and no agent involved.
+    </p>
+
+    <figure>
+      <figcaption>An agent proposal waiting for review — the gutter marks the changed line, the
+      pane offers accept and reject. <code>termesh --dump-frame . --open README.md --agent-demo</code></figcaption>
+      <div class="frame"><pre>{{FRAME_AGENT}}</pre></div>
+    </figure>
+
+    <figure>
+      <figcaption>A diagnostic in the gutter, a hover explaining it, and the error count in the
+      status bar. <code>termesh --dump-frame . --lsp-demo</code></figcaption>
+      <div class="frame"><pre>{{FRAME_LSP}}</pre></div>
+    </figure>
+
+    <figure>
+      <figcaption>Git status as conflicts, staged and worktree groups, with an explicit-index
+      commit behind <code>c</code>. <code>termesh --dump-frame . --git-demo</code></figcaption>
+      <div class="frame"><pre>{{FRAME_GIT}}</pre></div>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Integration is tiered, so the bet is de-risked</h2>
+    <ul class="plain">
+      <li><strong>Tier 0 — any AI CLI, free.</strong> Run it inside a managed terminal pane. No
+      agent-specific code at all; it works because the terminal works.</li>
+      <li><strong>Tier 1 — native ACP.</strong> Shared project context, inline diff review of
+      proposed edits, and permission-gated command execution that shows you the exact program,
+      argv, cwd and environment before anything runs.</li>
+    </ul>
+    <p class="lede">Both ship today. The tiering exists so the product stays useful where the hard
+    one cannot reach.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Install</h2>
+    <pre class="code">cargo install termesh --locked</pre>
+    <p class="lede">
+      Or take a signed binary from the
+      <a href="https://github.com/iseif/termesh/releases/latest">latest release</a> — Linux
+      (x86-64, AArch64), macOS (Intel, Apple Silicon) and Windows (x86-64), each with
+      <code>SHA256SUMS</code>. The macOS builds are signed with a Developer ID certificate and
+      notarized, so a browser download runs without a Gatekeeper prompt. Requires Rust 1.88 or
+      newer to build from source.
+    </p>
+    <pre class="code">termesh .                    # open a project
+termesh                      # reopen the last one
+termesh --dump-frame . --lsp-demo    # see a frame without a TTY</pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>This is a public beta, and the edges are written down</h2>
+    <p class="lede">
+      The <a href="https://github.com/iseif/termesh/blob/main/docs/support.md">support
+      boundaries</a> say exactly what is tested and what is not, rather than leaving you to find
+      out. The ones most likely to matter:
+    </p>
+    <ul class="plain">
+      <li>Windows is <strong>best-effort, not Tier 1</strong> — everything passes there except
+      pseudo-terminal teardown, which is unverified.</li>
+      <li>Language-server support covers Rust, TypeScript/JavaScript, Python and Java. <strong>Syntax
+      highlighting is a separate thing</strong> and ships one grammar, Rust — the others get full
+      language intelligence but render as plain text.</li>
+      <li>An agent session does not survive a restart. Transcript history returns read-only and a
+      fresh session starts, because the implemented ACP baseline has no usable session-load path.</li>
+      <li>No debugger, plugin system, or multi-agent orchestration yet.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>
+      Dual-licensed <a href="https://github.com/iseif/termesh/blob/main/LICENSE-MIT">MIT</a> or
+      <a href="https://github.com/iseif/termesh/blob/main/LICENSE-APACHE">Apache-2.0</a>.
+      &nbsp;·&nbsp;
+      <a href="https://github.com/iseif/termesh/blob/main/ARCHITECTURE.md">Architecture</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/iseif/termesh/blob/main/docs/adr/README.md">Decision records</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/iseif/termesh/blob/main/CHANGELOG.md">Changelog</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/iseif/termesh/issues">Issues</a>
+    </p>
+    <p>Page built from termesh {{VERSION}}. The frames above were rendered by that build.</p>
+  </div>
+</footer>
+
+</body>
+</html>
