@@ -646,9 +646,9 @@ fn agent_body(model: &Model) -> String {
             "agents.toml under your\n",
             "config dir. See the\n",
             "README for the shape.\n\n",
-            "Tier 0: run any AI CLI\n",
-            "in a terminal instead\n",
-            "(Phase 04).",
+            "Or press F6 and run\n",
+            "any AI CLI in a\n",
+            "terminal.",
         )
         .to_string();
     };

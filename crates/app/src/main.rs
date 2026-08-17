@@ -1610,6 +1610,42 @@ mod tests {
         );
     }
 
+    /// 0.1.0 shipped "Tier 0: run any AI CLI in a terminal instead (Phase 04)." in the
+    /// agent pane — the first screen anyone without an agent configured sees. Both are
+    /// build vocabulary: "Phase NN" is the internal plan and "Tier N" is ADR-0003's
+    /// framing. Neither means anything to a user, and a released binary cannot be edited,
+    /// so the guard is a test rather than a convention.
+    ///
+    /// It scans string literals only. Comments and doc comments are where this vocabulary
+    /// belongs and are left alone — including the ones in this test.
+    #[test]
+    fn no_screen_text_uses_the_projects_internal_vocabulary() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders = Vec::new();
+        for file in ["cli.rs", "input.rs", "model.rs", "view.rs"] {
+            let source = std::fs::read_to_string(src.join(file)).unwrap();
+            for (number, line) in
+                source.lines().take_while(|line| line.trim() != "#[cfg(test)]").enumerate()
+            {
+                let code = line.trim_start();
+                if code.starts_with("//") || !code.contains('"') {
+                    continue;
+                }
+                for term in ["Phase 0", "Phase 1", "Tier 0", "Tier 1", "ADR-"] {
+                    if code.contains(term) {
+                        offenders.push(format!("{file}:{}: {term}", number + 1));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            offenders.is_empty(),
+            "screen text must say what the user can do, not where the feature came from: \
+             {offenders:?}"
+        );
+    }
+
     fn sample_fs() -> FakeFileSystem {
         FakeFileSystem::with_paths(&[
             "/proj/Cargo.toml",
@@ -6778,6 +6814,14 @@ mod agent_tests {
         let unconfigured = view::snapshot(&mut m, 96, 28);
         assert!(unconfigured.contains("No agent configured"), "got:\n{unconfigured}");
         assert!(unconfigured.contains("agents.toml"), "and says how to fix it");
+        // The fallback is half the message and had no assertion, which is why 0.1.0 could
+        // ship it as "Tier 0: ... (Phase 04)" — build vocabulary naming neither the key to
+        // press nor the thing that happens. Someone with no ACP agent can still work.
+        //
+        // Match "press F6", not "F6": the status bar carries "F6 Terminal" on every frame,
+        // so a bare "F6" is satisfied by a completely empty agent pane.
+        assert!(unconfigured.contains("press F6"), "offers the fallback:\n{unconfigured}");
+        assert!(unconfigured.contains("any AI CLI"), "and says what for:\n{unconfigured}");
 
         m.agent_name = Some("opencode".into());
         let connected = view::snapshot(&mut m, 96, 28);

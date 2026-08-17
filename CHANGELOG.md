@@ -4,6 +4,17 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
+## Unreleased
+
+### Fixed
+
+- The agent pane's empty state — the first screen anyone without an agent configured sees — offered
+  the terminal fallback as "Tier 0: run any AI CLI in a terminal instead (Phase 04)". Both are
+  build vocabulary: "Phase NN" named the internal plan and "Tier N" named an ADR's framing, and
+  neither told the reader what to press. It now says to press F6 and run any AI CLI in a terminal.
+  A test scans screen text for that vocabulary so it cannot come back, and the pane's snapshot test
+  now asserts the fallback rather than only the setup instructions.
+
 ## 0.1.0 — 2026-08-16
 
 First public release. The whole product ships at once because the parts only mean something
