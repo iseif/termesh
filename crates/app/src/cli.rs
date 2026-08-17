@@ -416,7 +416,10 @@ mod tests {
     #[test]
     fn the_version_flag_prints_the_crate_version() {
         assert_eq!(parse(&["--version"]).mode, Mode::Version);
-        assert_eq!(VERSION_LINE, "termesh 0.1.0");
+        // Against the manifest, not a literal: pinning the number here made every release
+        // a test edit, and it caught nothing — what is worth holding is that the line
+        // still tracks Cargo.toml and has not become a hand-updated copy.
+        assert_eq!(VERSION_LINE, format!("termesh {}", env!("CARGO_PKG_VERSION")));
         let line = version_line();
         assert!(line.starts_with(VERSION_LINE));
         assert!(line.ends_with(')'), "name version (commit): {line}");

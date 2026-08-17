@@ -4,7 +4,7 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
-## Unreleased
+## 0.1.1 — 2026-08-17
 
 ### Fixed
 
