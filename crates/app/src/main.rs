@@ -8054,6 +8054,45 @@ mod headless_demo {
         assert!(hunk_frame.contains('~'), "the diff hunk mark survives: {hunk_frame}");
     }
 
+    /// The README shows two frames and calls them real output. They were real when pasted;
+    /// the mock they replaced was drawn by hand and had drifted away from the actual UI,
+    /// which is the failure this guards against. Both demos run against synthetic
+    /// workspaces, so their frames are byte-identical anywhere and can simply be compared.
+    ///
+    /// If this fails after a deliberate UI change, repaste from the command in the README —
+    /// do not relax the assertion.
+    #[test]
+    fn the_readme_frames_are_still_what_the_demos_render() {
+        let readme = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../README.md")
+            .canonicalize()
+            .expect("README.md sits at the workspace root");
+        let readme = std::fs::read_to_string(readme).unwrap();
+
+        // `--dump-frame` renders at 96x28; the README copies have trailing spaces stripped
+        // because editors and pre-commit hooks remove them from markdown anyway.
+        let rendered = |demo: fn(&mut Model)| {
+            let mut model = Model::new();
+            demo(&mut model);
+            view::snapshot(&mut model, 96, 28)
+                .lines()
+                .map(str::trim_end)
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        for (flag, demo) in
+            [("--lsp-demo", run_lsp_demo as fn(&mut Model)), ("--git-demo", run_git_demo)]
+        {
+            let frame = rendered(demo);
+            assert!(
+                readme.contains(frame.trim_end()),
+                "README no longer shows what `termesh --dump-frame . {flag}` renders. \
+                 Current output:\n{frame}"
+            );
+        }
+    }
+
     #[test]
     fn every_pane_still_renders_at_sixty_columns() {
         for depth in [ColorDepth::TrueColor, ColorDepth::Ansi16, ColorDepth::None] {

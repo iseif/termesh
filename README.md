@@ -1,6 +1,6 @@
 # termesh
 
-> **0.1.0 — public beta.** The editor and ACP diff-review loop, integrated terminals, search, Git,
+> **Public beta.** The editor and ACP diff-review loop, integrated terminals, search, Git,
 > polyglot tasks, crash recovery, session restore, and lazy Rust/TypeScript/Python/Java language
 > sessions all share one workspace with the agent. Read the
 > [support boundaries](docs/support.md) before you rely on it — they are specific about what is
@@ -18,17 +18,79 @@ The terminal already has great focused tools (Helix, Zellij, Yazi, lazygit) and 
 
 ## What it looks like
 
+Real output, not a mock — and reproducible on your machine, with no terminal, no language server,
+and no agent involved.
+
+A diagnostic in the gutter, a hover explaining it, and the error count in the status bar
+(`termesh --dump-frame . --lsp-demo`):
+
 ```text
-┌ Project ───────────┬ editor tabs ────────────────────────┬ Agent ─────────────┐
-│ ▾ src              │ main.rs •│ app.rs │ README.md        │ ▸ claude-code       │
-│   ▾ services       │  13 ~   self.rope.apply(&tx);  ◀diff │ ▎ Proposed 3 edits  │
-│      git.rs        │  14 +   self.version += 1;     ◀diff │ ▎ [a]ccept [r]eject │
-│   main.rs          │  15   }                              │ …streaming…         │
-├────────────────────┼──────────────────────────────────────┤ tool: run cargo test│
-│ Outline│Git│Probs   │ Terminal 1 │ Output                   │  ⏵ awaiting approval│
-└────────────────────┴──────────────────────────────────────┴─────────────────────┘
- Ctrl+P Files  F9 Search  F10 Actions  F6 Term  F7 Agent  branch: main  0 errors
+┌ Project ──────────┐┌ ● main.rs ─────────────────────────────────────┐┌ Agent ────────────────┐
+│▾ termesh-lsp-demo ││ 1E fn main() -> i32 { "wrong" }                ││No agent configured.   │
+│  ▸ src            ││ 2                   ┌ Hover ───────────────────┐│                       │
+│    Cargo.toml     ││                     │mismatched types          ││Define one in          │
+│                   ││                     │expected i32, found &str  ││agents.toml under your │
+│                   ││                     └──────────────────────────┘│config dir. See the    │
+│                   ││                                                ││README for the shape.  │
+│                   ││                                                ││                       │
+│                   ││                                                ││Or press F6 and run    │
+│                   ││                                                ││any AI CLI in a        │
+│                   ││                                                ││terminal.              │
+│                   ││                                                ││                       │
+│                   ││                                                ││                       │
+│                   ││                                                ││                       │
+│                   ││                                                ││                       │
+│                   ││                                                ││                       │
+│                   ││                                                ││                       │
+│                   │└────────────────────────────────────────────────┘│                       │
+│                   │┌ Terminal ──────────────────────────────────────┐│                       │
+│                   ││$                                               ││                       │
+│                   ││                                                ││                       │
+│                   ││No terminal open.                               ││                       │
+│                   ││Use F6 or the command palette to start one.     ││                       │
+│                   ││                                                ││                       │
+│                   ││                                                ││                       │
+│                   ││                                                ││                       │
+└───────────────────┘└────────────────────────────────────────────────┘└───────────────────────┘
+ Ctrl+P Files   F9 Search   F10 Actions termesh-lsp-demo (rust)   focus: Editor   1:20   1 error
 ```
+
+Git status as conflicts, staged, and worktree groups (`termesh --dump-frame . --git-demo`):
+
+```text
+┌ ● Project ────────┐┌ Editor ────────────────────────────────────────┐┌ Agent ────────────────┐
+│▾ termesh-git-demo ││No file open.                                   ││No agent configured.   │
+│                   ││                                                ││                       │
+│           ┌ Git Changes ─────────────────────────────────────────────────────────┐n          │
+│           │  Conflicts                                                           │under your │
+│           │▶ UU conflict.rs                                                      │See the    │
+│           │  Staged                                                              │he shape.  │
+│           │  M  src/staged.rs                                                    │           │
+│           │  Changes                                                             │and run    │
+│           │   M src/worktree.rs                                                  │n a        │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │                                                                      │           │
+│           │Enter Diff · s Stage · u Unstage · c Commit · b Branch · Esc Close    │           │
+│           └──────────────────────────────────────────────────────────────────────┘           │
+│                   ││                                                ││                       │
+└───────────────────┘└────────────────────────────────────────────────┘└───────────────────────┘
+ Ctrl+P Files   F termesh-git-demo (rust)   focus: Project   branch: main ↑2 ↓1 ~3 !1   0 errors
+```
+
+Both run against synthetic workspaces, which is why they come out byte-identical anywhere. The
+remaining flags — `--agent-demo`, `--terminal-demo`, `--search-task-demo`, `--polyglot-demo`,
+`--java-demo` — are listed further down.
 
 ## Agent integration is tiered (so the bet is de-risked)
 
