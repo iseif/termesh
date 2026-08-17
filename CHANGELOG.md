@@ -4,7 +4,7 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
-## Unreleased
+## 0.1.2 — 2026-08-17
 
 ### Fixed
 
@@ -23,6 +23,21 @@ described in [docs/configuration.md](docs/configuration.md).
   release workflow signs whenever the credentials are present and now refuses a half-configured
   setup, because signing without notarizing produces a binary Gatekeeper still rejects from a run
   that otherwise looks successful. The Windows binaries remain unsigned.
+
+This is the first release whose macOS artifacts are signed, so upgrading is worthwhile if you
+installed from a downloaded archive: 0.1.0 and 0.1.1 shipped unsigned and cannot be re-signed. If
+you cleared the quarantine attribute by hand on an earlier download, that is no longer necessary.
+
+### Install
+
+Prebuilt binaries for Linux (x86-64, AArch64), macOS (Intel, Apple Silicon), and Windows (x86-64)
+are attached to this release, with `SHA256SUMS`. From source:
+
+```bash
+cargo install termesh --locked
+```
+
+Requires Rust 1.88 or newer.
 
 ## 0.1.1 — 2026-08-17
 

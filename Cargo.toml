@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 # Ratatui 0.30.2 and its ratatui-core/ratatui-widgets crates declare Rust 1.88 as
@@ -18,21 +18,21 @@ readme = "README.md"
 
 [workspace.dependencies]
 # --- internal crates ---
-termesh-core   = { version = "0.1.1", path = "crates/core" }
-termesh-editor = { version = "0.1.1", path = "crates/editor" }
-termesh-agent  = { version = "0.1.1", path = "crates/agent" }
-termesh-ui     = { version = "0.1.1", path = "crates/ui" }
-termesh-config = { version = "0.1.1", path = "crates/config" }
-termesh-filesystem = { version = "0.1.1", path = "crates/filesystem" }
-termesh-git        = { version = "0.1.1", path = "crates/git" }
-termesh-lsp        = { version = "0.1.1", path = "crates/lsp" }
-termesh-workspace  = { version = "0.1.1", path = "crates/workspace" }
-termesh-platform   = { version = "0.1.1", path = "crates/platform" }
-termesh-syntax     = { version = "0.1.1", path = "crates/syntax" }
-termesh-terminal   = { version = "0.1.1", path = "crates/terminal" }
-termesh-search     = { version = "0.1.1", path = "crates/search" }
-termesh-tasks      = { version = "0.1.1", path = "crates/tasks" }
-termesh-test-support = { version = "0.1.1", path = "crates/test-support" }
+termesh-core   = { version = "0.1.2", path = "crates/core" }
+termesh-editor = { version = "0.1.2", path = "crates/editor" }
+termesh-agent  = { version = "0.1.2", path = "crates/agent" }
+termesh-ui     = { version = "0.1.2", path = "crates/ui" }
+termesh-config = { version = "0.1.2", path = "crates/config" }
+termesh-filesystem = { version = "0.1.2", path = "crates/filesystem" }
+termesh-git        = { version = "0.1.2", path = "crates/git" }
+termesh-lsp        = { version = "0.1.2", path = "crates/lsp" }
+termesh-workspace  = { version = "0.1.2", path = "crates/workspace" }
+termesh-platform   = { version = "0.1.2", path = "crates/platform" }
+termesh-syntax     = { version = "0.1.2", path = "crates/syntax" }
+termesh-terminal   = { version = "0.1.2", path = "crates/terminal" }
+termesh-search     = { version = "0.1.2", path = "crates/search" }
+termesh-tasks      = { version = "0.1.2", path = "crates/tasks" }
+termesh-test-support = { version = "0.1.2", path = "crates/test-support" }
 
 # --- intended external toolkit (declared for reference; wired in from Phase 01+,
 #     so no member depends on these yet and the Phase-00 build stays offline/green) ---
