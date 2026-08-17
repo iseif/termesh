@@ -1,0 +1,48 @@
+name: Landing page
+
+on:
+  push:
+    branches: [main]
+    # The page only restates the README and renders frames from the binary, so it does not
+    # need rebuilding when unrelated code changes.
+    paths:
+      - "site/**"
+      - "scripts/build-site.sh"
+      - ".github/workflows/pages.yml"
+      - "Cargo.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A superseded deploy is of no interest, but never cancel one mid-flight: that can leave
+# the Pages deployment half-updated.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Render the page
+        run: ./scripts/build-site.sh
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site/_build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

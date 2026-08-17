@@ -8067,7 +8067,11 @@ mod headless_demo {
             .join("../../README.md")
             .canonicalize()
             .expect("README.md sits at the workspace root");
-        let readme = std::fs::read_to_string(readme).unwrap();
+        // Normalised because the repository has no `.gitattributes`, so Git for Windows
+        // checks markdown out with CRLF while the rendered frame is always LF. Without
+        // this the test is green on Unix and red on Windows for a reason that has nothing
+        // to do with whether the README is accurate.
+        let readme = std::fs::read_to_string(readme).unwrap().replace("\r\n", "\n");
 
         // `--dump-frame` renders at 96x28; the README copies have trailing spaces stripped
         // because editors and pre-commit hooks remove them from markdown anyway.
