@@ -6,7 +6,7 @@
 > [support boundaries](docs/support.md) before you rely on it — they are specific about what is
 > tested and what is not.
 
-**A terminal-native, agent-first IDE.** The AI coding agent is a first-class occupant of the workspace — sharing your open buffers, LSP diagnostics, git diff, and terminal output — not a chat box bolted to the side. Built as an [ACP](https://agentclientprotocol.com) client, so any compatible agent (Claude Code, Codex, Gemini CLI, OpenCode, Goose) plugs in. Runs anywhere a terminal runs: SSH, containers, minimal servers.
+**A terminal-native, agent-first IDE.** The AI coding agent is a first-class occupant of the workspace — sharing your open buffers, LSP diagnostics, git diff, and terminal output — not a chat box bolted to the side. Built as an [ACP](https://agentclientprotocol.com) client, so it is agent-agnostic — bring your own. Inline diff review needs the agent to write *through* the client rather than straight to disk, and of the ACP agents tested so far — Codex, [JetBrains Junie](https://junie.jetbrains.com/docs/junie-cli-acp.html), opencode — **none does**: each edits the file itself and sends the diff only to be displayed. The review path is implemented and covered end to end against the protocol; the [support boundaries](docs/support.md) record what each agent actually did on the wire. Runs anywhere a terminal runs: SSH, containers, minimal servers.
 
 ![termesh opening a project, quick-opening a file, showing git changes, and reporting a
 rust-analyzer diagnostic](site/img/demo.gif)

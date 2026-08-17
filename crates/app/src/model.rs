@@ -282,6 +282,7 @@ pub enum Overlay {
     Prompt(Prompt),
     Search(SearchOverlay),
     Tasks(TaskPicker),
+    AgentModes(AgentModePicker),
     Problems(ProblemsOverlay),
     GitStatus(GitStatusOverlay),
     GitDiff(GitDiffOverlay),
@@ -339,6 +340,37 @@ pub struct AgentSession {
     /// Managed terminals referenced by this conversation, retained after ACP release.
     pub attached_terminals: Vec<TerminalId>,
     pub turn_active: bool,
+    /// What this agent will let the session do, and which of those it is in (ADR-0015).
+    /// Empty for the agents that offer no choice, which is most of them.
+    pub modes: Vec<termesh_core::SessionMode>,
+    pub current_mode: Option<String>,
+}
+
+/// The agent's own list of what it will let this session do (ADR-0015 §3).
+///
+/// Holds the modes as the agent described them rather than a rendered list, so the picker
+/// can show each one's description — which is the only place the meaning of a name like
+/// `full-access` is written down.
+pub struct AgentModePicker {
+    pub modes: Vec<termesh_core::SessionMode>,
+    pub current: Option<String>,
+    pub selected: usize,
+}
+
+impl AgentModePicker {
+    pub fn move_up(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+    }
+
+    pub fn move_down(&mut self) {
+        if self.selected + 1 < self.modes.len() {
+            self.selected += 1;
+        }
+    }
+
+    pub fn selected(&self) -> Option<&termesh_core::SessionMode> {
+        self.modes.get(self.selected)
+    }
 }
 
 /// Which protocol exchange is blocked on the permission prompt.
@@ -3317,6 +3349,24 @@ impl Model {
             AgentEvent::Ready { capabilities } => {
                 self.agent_capabilities = Some(capabilities);
             }
+            AgentEvent::ModesAvailable { session, current, available } => {
+                if let Some(agent) = self.agent.as_mut().filter(|agent| agent.id == session) {
+                    agent.modes = available;
+                    agent.current_mode = Some(current);
+                }
+            }
+            AgentEvent::ModeChanged { session, mode } => {
+                if let Some(agent) = self.agent.as_mut().filter(|agent| agent.id == session) {
+                    let name = agent
+                        .modes
+                        .iter()
+                        .find(|candidate| candidate.id == mode)
+                        .map(|candidate| candidate.name.clone())
+                        .unwrap_or_else(|| mode.clone());
+                    agent.current_mode = Some(mode);
+                    self.notification = Some(format!("agent mode: {name}"));
+                }
+            }
             AgentEvent::SessionStarted { session } => {
                 if let Some(previous) = self.agent.as_ref().map(|agent| agent.id) {
                     self.cancel_agent_terminals(previous, "agent session replaced");
@@ -3325,6 +3375,8 @@ impl Model {
                     id: session,
                     transcript: Vec::new(),
                     proposals: Vec::new(),
+                    modes: Vec::new(),
+                    current_mode: None,
                     pending_permission: None,
                     attached_terminals: Vec::new(),
                     turn_active: false,
@@ -3988,6 +4040,18 @@ impl Model {
         };
 
         let total = proposal.hunks.len();
+        // A hunk the buffer already contains is `Satisfied`, not `Conflicted` — the agent
+        // asked for something that is already true. Counted separately because the two
+        // read identically from the applied count alone, and reporting a conflict for a
+        // change that is already present sends the reader looking for a problem that is
+        // not there. Agents that write to disk themselves rather than through the client
+        // produce exactly this: by the time the human accepts, the watcher has reloaded
+        // the buffer and the edit is in it.
+        let satisfied = proposal
+            .hunks
+            .iter()
+            .filter(|hunk| matches!(hunk.state, termesh_editor::HunkState::Satisfied))
+            .count();
         let mut applied = 0;
 
         if accept {
@@ -4025,7 +4089,13 @@ impl Model {
 
         self.notification = Some(match (accept, applied, total) {
             (false, _, _) => format!("rejected {total} edit(s)"),
+            (true, 0, t) if satisfied == t => {
+                "nothing to apply — the buffer already matches what was proposed".to_string()
+            }
             (true, 0, _) => "nothing applied — every hunk conflicted".to_string(),
+            (true, a, t) if a + satisfied == t => {
+                format!("applied {a} edit(s); {satisfied} already present")
+            }
             (true, a, t) if a < t => format!("applied {a} of {t} edit(s); the rest conflicted"),
             (true, a, _) => format!("applied {a} edit(s)"),
         });
@@ -4229,6 +4299,39 @@ impl Model {
     /// are a **projection** of it, thrown away and rebuilt here rather than maintained in
     /// parallel. Two mechanisms tracking one piece of state is how a proposal ends up
     /// reading clean in the pane and conflicted in the gutter.
+    /// Offer the agent's modes, if it published any.
+    ///
+    /// Says which of the three situations applies rather than doing nothing: no session,
+    /// a session whose agent offers no choice, or a list to pick from. An agent with no
+    /// modes is the common case and not a fault (ADR-0015 §4).
+    fn open_agent_modes(&mut self) {
+        let Some(agent) = self.agent.as_ref() else {
+            self.notification = Some("no agent session".into());
+            return;
+        };
+        if agent.modes.is_empty() {
+            self.notification = Some("this agent offers no session modes".into());
+            return;
+        }
+        let current = agent.current_mode.clone();
+        let selected = current
+            .as_ref()
+            .and_then(|id| agent.modes.iter().position(|mode| &mode.id == id))
+            .unwrap_or(0);
+        self.overlays.push(Overlay::AgentModes(AgentModePicker {
+            modes: agent.modes.clone(),
+            current,
+            selected,
+        }));
+    }
+
+    /// Ask the agent to change mode. The client's own view is not updated here — it moves
+    /// when the agent says it moved (ADR-0015 §5).
+    pub fn set_agent_mode(&mut self, mode: String) {
+        let Some(agent) = self.agent.as_ref() else { return };
+        self.agent_outbox.push(AgentRequest::SetMode { session: agent.id, mode });
+    }
+
     pub fn sync_proposals(&mut self) {
         let Some(agent) = self.agent.as_mut() else { return };
         if agent.proposals.is_empty() {
@@ -5202,6 +5305,7 @@ impl Model {
             Command::Action(Action::WorkspaceRestoreDrafts) => self.accept_recovery_drafts(),
             Command::Action(Action::AgentSessionNew) => self.new_agent_session(),
             Command::Action(Action::AgentPrompt) => self.prompt_agent(),
+            Command::Action(Action::AgentMode) => self.open_agent_modes(),
             Command::Action(Action::AgentProposalAccept) => self.resolve_proposal(true),
             Command::Action(Action::AgentProposalReject) => self.resolve_proposal(false),
             Command::Action(Action::TerminalFocus) => self.toggle_terminal_focus(),

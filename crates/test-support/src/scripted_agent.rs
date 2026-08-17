@@ -32,7 +32,9 @@ use std::path::PathBuf;
 use termesh_agent::service::{
     AgentEvent, AgentIntegration, AgentRequest, AgentService, StopReason,
 };
-use termesh_core::{AgentCapabilities, PermissionRequestId, ProposalId, ReadRequestId, SessionId};
+use termesh_core::{
+    AgentCapabilities, PermissionRequestId, ProposalId, ReadRequestId, SessionId, SessionMode,
+};
 
 /// One thing the scripted agent does, in the order a real turn would do it.
 ///
@@ -76,6 +78,10 @@ pub struct ScriptedAgent {
     /// reading *our buffers* rather than the disk.
     served: Vec<(PathBuf, Option<String>)>,
     session: Option<SessionId>,
+    /// Modes this agent claims to offer, reported when the session opens. Empty is the
+    /// common case and means the agent has no choice to give (ADR-0015 §4).
+    modes: Vec<SessionMode>,
+    current_mode: Option<String>,
     next_id: u64,
     capabilities: AgentCapabilities,
     ready_emitted: bool,
@@ -89,6 +95,15 @@ impl ScriptedAgent {
     /// Queue a turn. The first prompt replays the first turn, and so on.
     pub fn with_turn(mut self, updates: Vec<ScriptedUpdate>) -> Self {
         self.turns.push_back(updates);
+        self
+    }
+
+    /// Offer session modes, the way Codex does. `current` must name one of them; it is
+    /// the mode the session starts in, and the client is expected to leave it alone until
+    /// a human says otherwise.
+    pub fn with_modes(mut self, current: &str, modes: Vec<SessionMode>) -> Self {
+        self.current_mode = Some(current.to_string());
+        self.modes = modes;
         self
     }
 
@@ -205,6 +220,13 @@ impl AgentService for ScriptedAgent {
                 let session = SessionId::new(self.fresh_id());
                 self.session = Some(session);
                 self.outbox.push_back(AgentEvent::SessionStarted { session });
+                if let Some(current) = self.current_mode.clone() {
+                    self.outbox.push_back(AgentEvent::ModesAvailable {
+                        session,
+                        current,
+                        available: self.modes.clone(),
+                    });
+                }
             }
             AgentRequest::Prompt { .. } => {
                 let turn = self.turns.pop_front().unwrap_or_default();
@@ -215,6 +237,15 @@ impl AgentService for ScriptedAgent {
                 if let Some(rest) = self.resume.take() {
                     self.replay(rest);
                 }
+            }
+            // `ModeChanged` is what the real translator emits once the agent has answered —
+            // from the success reply, or from a later `current_mode_update` (ADR-0015 §5).
+            // This double stands in for the translator, so it emits the same event; which
+            // of the two wire paths produced it is settled in the protocol tests, because
+            // real agents differ (codex-acp replies and never notifies).
+            AgentRequest::SetMode { session, mode } => {
+                self.current_mode = Some(mode.clone());
+                self.outbox.push_back(AgentEvent::ModeChanged { session, mode });
             }
             AgentRequest::Cancel { session } => {
                 self.resume = None;

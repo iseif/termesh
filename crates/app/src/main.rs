@@ -6930,6 +6930,185 @@ mod agent_tests {
         );
     }
 
+    fn modes() -> Vec<termesh_core::SessionMode> {
+        vec![
+            termesh_core::SessionMode {
+                id: "read-only".into(),
+                name: "Read Only".into(),
+                description: Some("Approval required to edit files.".into()),
+            },
+            termesh_core::SessionMode {
+                id: "auto".into(),
+                name: "Default".into(),
+                description: Some("Can read and edit files in the workspace.".into()),
+            },
+        ]
+    }
+
+    /// A session held in a read-only mode explains what it would change and then changes
+    /// nothing. Without the mode on screen that is indistinguishable from a broken agent,
+    /// which is how it read when Codex was first pointed at this (ADR-0015 §2).
+    #[test]
+    fn the_pane_says_which_mode_the_session_is_in() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_modes("read-only", modes());
+        run_turn(&mut m, &mut agent);
+
+        let frame = view::snapshot(&mut m, 96, 28);
+        assert!(frame.contains("Read Only"), "the mode is on screen:\n{frame}");
+    }
+
+    /// The picker shows the agent's own descriptions, because `auto` and `full-access`
+    /// mean whatever that agent decided and the name alone does not say (ADR-0015 §3).
+    #[test]
+    fn the_mode_picker_offers_what_the_agent_described() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_modes("read-only", modes());
+        run_turn(&mut m, &mut agent);
+
+        m.dispatch(Command::Action(Action::AgentMode));
+        let frame = view::snapshot(&mut m, 96, 28);
+        assert!(frame.contains("Agent Session Mode"), "the picker opens:\n{frame}");
+        assert!(frame.contains("Can read and edit"), "with the agent's wording:\n{frame}");
+    }
+
+    /// Choosing a mode asks; it does not assume. The client's view moves when the agent
+    /// reports the change, not when the request goes out (ADR-0015 §5).
+    #[test]
+    fn choosing_a_mode_asks_the_agent_and_waits_for_its_answer() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_modes("read-only", modes());
+        run_turn(&mut m, &mut agent);
+
+        m.dispatch(Command::Action(Action::AgentMode));
+        input::on_chord(&mut m, KeyChord::plain(Key::Down));
+        input::on_chord(&mut m, KeyChord::plain(Key::Enter));
+
+        let requests = m.take_agent_requests();
+        assert!(
+            requests.iter().any(|request| matches!(request,
+                termesh_core::AgentRequest::SetMode { mode, .. } if mode == "auto")),
+            "the request goes out: {requests:?}"
+        );
+        assert_eq!(
+            m.agent.as_ref().unwrap().current_mode.as_deref(),
+            Some("read-only"),
+            "and the client has not moved itself"
+        );
+
+        for request in requests {
+            agent.send(request);
+        }
+        for event in agent.poll() {
+            m.on_agent_event(event);
+        }
+        assert_eq!(
+            m.agent.as_ref().unwrap().current_mode.as_deref(),
+            Some("auto"),
+            "it moves when the agent says so"
+        );
+    }
+
+    /// Most agents offer no modes. Saying so beats opening an empty list (ADR-0015 §4).
+    #[test]
+    fn an_agent_without_modes_says_so_rather_than_offering_nothing() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new();
+        run_turn(&mut m, &mut agent);
+
+        m.dispatch(Command::Action(Action::AgentMode));
+        assert!(
+            !matches!(m.overlays.last(), Some(crate::model::Overlay::AgentModes(_))),
+            "no empty picker"
+        );
+        assert!(
+            m.notification.as_deref().unwrap_or_default().contains("no session modes"),
+            "got {:?}",
+            m.notification
+        );
+    }
+
+    /// The pane scrolls from the bottom and snaps back there on new content, so the last
+    /// thing in the body is the thing on screen. A proposal rendered above the transcript
+    /// was therefore invisible after any long answer — which is every answer that explains
+    /// itself. Reported from a real session against Junie.
+    #[test]
+    fn the_accept_prompt_sits_below_the_answer_that_pushed_it_down() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_turn(vec![
+            ScriptedUpdate::Message("MARKER_START".into()),
+            ScriptedUpdate::Write { path: "/proj/src/main.rs".into(), content: IMPROVED.into() },
+            ScriptedUpdate::Message("MARKER_END".into()),
+            ScriptedUpdate::End,
+        ]);
+        run_turn(&mut m, &mut agent);
+
+        let body = view::snapshot(&mut m, 96, 28);
+        let answer = body.rfind("MARKER_END").expect("the answer is in the pane");
+        let prompt = body.find("[a]ccept").expect("so is the prompt");
+        assert!(
+            prompt > answer,
+            "the decision must come after the text, or it scrolls out of view:\n{body}"
+        );
+    }
+
+    /// Not every ACP agent routes its writes through the client. Some edit the file
+    /// directly and send the diff only to display it, so by the time the human accepts,
+    /// the watcher has reloaded the buffer and the change is already in it. Those hunks
+    /// are `Satisfied`, not `Conflicted` — but both leave nothing to apply, and the
+    /// report said "every hunk conflicted", which sends the reader hunting for a clash
+    /// that never happened. Observed against a real agent while recording the demo.
+    #[test]
+    fn a_proposal_the_buffer_already_contains_is_not_reported_as_a_conflict() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_turn(vec![
+            ScriptedUpdate::Write { path: "/proj/src/main.rs".into(), content: IMPROVED.into() },
+            ScriptedUpdate::End,
+        ]);
+        run_turn(&mut m, &mut agent);
+
+        // The very same change arrives in the buffer by another route before the human
+        // answers — which is what an agent writing to disk behind the client looks like
+        // from in here. It has to be the identical edit: a differently shaped one that
+        // happens to produce the same text is a conflict, and rightly so.
+        let proposal = &m.agent.as_ref().expect("a session").proposals[0];
+        let hunks: Vec<&termesh_agent::Hunk> = proposal.applicable().collect();
+        let buffer_len = m.active_buffer().expect("a buffer").text().len_chars();
+        let changes = termesh_agent::changeset_from_hunks(&hunks, buffer_len);
+
+        let buffer = m.active_buffer_mut().expect("a buffer");
+        let tx = buffer.transaction(changes, termesh_editor::EditSource::Keyboard);
+        buffer.apply(&tx).expect("the edit applies");
+        assert_eq!(buffer.text().to_string(), IMPROVED, "the buffer now holds it already");
+
+        // Proposals are re-derived against the live text; an edit made straight to the
+        // buffer has not been through the loop that does it.
+        m.sync_proposals();
+        assert!(
+            m.agent.as_ref().unwrap().proposals[0].applicable().next().is_none(),
+            "nothing is left to apply"
+        );
+
+        m.focus = Pane::Agent;
+        input::on_chord(&mut m, KeyChord::plain(Key::Char('a')));
+
+        let notification = m.notification.as_deref().unwrap_or_default();
+        assert!(
+            notification.contains("already matches"),
+            "it should say the work is already done, got {notification:?}"
+        );
+        assert!(
+            !notification.contains("conflict"),
+            "and must not call an already-present change a conflict, got {notification:?}"
+        );
+    }
+
     /// A write says what the file should become, not what it was. Diffing against an
     /// empty base would turn every write into a whole-file rewrite.
     #[test]

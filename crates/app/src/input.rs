@@ -80,6 +80,7 @@ pub fn on_chord(model: &mut Model, chord: KeyChord) {
         Some(Overlay::Prompt(_)) => prompt_chord(model, chord),
         Some(Overlay::Search(_)) => search_chord(model, chord),
         Some(Overlay::Tasks(_)) => task_chord(model, chord),
+        Some(Overlay::AgentModes(_)) => agent_mode_chord(model, chord),
         Some(Overlay::Problems(_)) => problems_chord(model, chord),
         Some(Overlay::GitStatus(_)) => git_status_chord(model, chord),
         Some(Overlay::GitDiff(_)) => git_diff_chord(model, chord),
@@ -342,6 +343,32 @@ fn search_chord(model: &mut Model, chord: KeyChord) {
                 _ => model.open_file(path),
             }
         }
+    }
+}
+
+fn agent_mode_chord(model: &mut Model, chord: KeyChord) {
+    let chosen = {
+        let Some(Overlay::AgentModes(picker)) = model.overlays.last_mut() else { return };
+        match chord.key {
+            Key::Esc => {
+                model.overlays.pop();
+                return;
+            }
+            Key::Up => {
+                picker.move_up();
+                None
+            }
+            Key::Down => {
+                picker.move_down();
+                None
+            }
+            Key::Enter => picker.selected().map(|mode| mode.id.clone()),
+            _ => None,
+        }
+    };
+    if let Some(mode) = chosen {
+        model.overlays.pop();
+        model.set_agent_mode(mode);
     }
 }
 

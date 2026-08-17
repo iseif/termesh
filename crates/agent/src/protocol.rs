@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use termesh_core::{
     AgentCapabilities, AgentEvent, AgentRequest, AgentTerminalOperation, AgentTerminalRequestId,
     AgentTerminalResponse, PermissionDecision, PermissionRequestId, PromptCapabilities, ProposalId,
-    ReadRequestId, SessionId, StopReason, TerminalExit, TerminalId, TerminalSpec,
+    ReadRequestId, SessionId, SessionMode, StopReason, TerminalExit, TerminalId, TerminalSpec,
 };
 
 use crate::jsonrpc::{Message, RequestIds};
@@ -34,6 +34,7 @@ enum Pending {
     Initialize,
     NewSession,
     Prompt(SessionId),
+    SetMode { session: SessionId, mode: String },
 }
 
 /// Stateful but I/O-free translation in both directions.
@@ -177,6 +178,20 @@ impl Translator {
                     // No MCP servers of our own: the agent brings its own tooling, and we
                     // are the filesystem it talks to (ADR-0007 §3).
                     params: json!({ "cwd": cwd, "mcpServers": [] }),
+                })
+            }
+            AgentRequest::SetMode { session, mode } => {
+                let wire = self.wire_session(session)?.to_string();
+                let id = self.ids.allocate();
+                // The success reply is the agent's own statement that it changed the mode,
+                // so it is what moves this client — not a guess we render before hearing
+                // back. Waiting for `current_mode_update` instead would strand the pane:
+                // codex-acp answers `{}` and never notifies (ADR-0015 §5).
+                self.pending.insert(id, Pending::SetMode { session, mode: mode.clone() });
+                Some(Message::Request {
+                    id,
+                    method: "session/set_mode".into(),
+                    params: json!({ "sessionId": wire, "modeId": mode }),
                 })
             }
             AgentRequest::Prompt { session, text, context } => {
@@ -362,7 +377,15 @@ impl Translator {
                 self.next_session += 1;
                 let session = SessionId::new(self.next_session);
                 self.sessions.push((session, wire.to_string()));
-                (vec![AgentEvent::SessionStarted { session }], vec![])
+
+                // Modes are optional and most agents omit them, so their absence is not
+                // a failure — it means this session has one mode and no choice to offer
+                // (ADR-0015 §4).
+                let mut events = vec![AgentEvent::SessionStarted { session }];
+                if let Some(modes) = parse_session_modes(session, result.get("modes")) {
+                    events.push(modes);
+                }
+                (events, vec![])
             }
             Some(Pending::Prompt(session)) => {
                 let reason = match result.get("stopReason").and_then(Value::as_str) {
@@ -374,6 +397,9 @@ impl Translator {
                 self.expire_terminal_grants(session);
                 (vec![AgentEvent::TurnEnded { session, reason }], vec![])
             }
+            Some(Pending::SetMode { session, mode }) => {
+                (vec![AgentEvent::ModeChanged { session, mode }], vec![])
+            }
             None => (vec![], vec![]),
         }
     }
@@ -381,6 +407,9 @@ impl Translator {
     fn on_error(&mut self, id: u64, message: String) -> (Vec<AgentEvent>, Vec<Message>) {
         let session = match self.pending.remove(&id) {
             Some(Pending::Prompt(session)) => session,
+            // A refused mode change reports the refusal and leaves the mode alone — the
+            // agent said no, so the pane must keep showing what the agent is still in.
+            Some(Pending::SetMode { session, .. }) => session,
             _ => SessionId::new(0),
         };
         // A prompt that errors out ends its turn as surely as one that completes, so any
@@ -411,6 +440,13 @@ impl Translator {
                 .unwrap_or_default(),
             // Edits ride in on tool calls, as whole-file diffs (ADR-0007, finding 2).
             "tool_call" | "tool_call_update" => self.events_from_tool_call(session, update),
+            // The agent's own account of the session's mode, which is the one that counts
+            // — including when it differs from what we asked for (ADR-0015 §5).
+            "current_mode_update" => update
+                .get("modeId")
+                .and_then(Value::as_str)
+                .map(|mode| vec![AgentEvent::ModeChanged { session, mode: mode.to_string() }])
+                .unwrap_or_default(),
             _ => Vec::new(),
         }
     }
@@ -659,6 +695,35 @@ impl Translator {
     }
 }
 
+/// The `modes` object from a `session/new` result, if the agent sent one.
+///
+/// A mode with no id is unusable — it could never be named in `session/set_mode` — so it
+/// is dropped rather than offered. An empty or malformed object yields nothing at all,
+/// which reads the same as an agent that has no modes to offer (ADR-0015 §4).
+fn parse_session_modes(session: SessionId, modes: Option<&Value>) -> Option<AgentEvent> {
+    let modes = modes?;
+    let current = modes.get("currentModeId").and_then(Value::as_str)?;
+    let available: Vec<SessionMode> = modes
+        .get("availableModes")
+        .and_then(Value::as_array)?
+        .iter()
+        .filter_map(|mode| {
+            let id = mode.get("id").and_then(Value::as_str)?.to_string();
+            Some(SessionMode {
+                // Falling back to the id keeps an unnamed mode selectable rather than
+                // rendering a blank row in the picker.
+                name: mode.get("name").and_then(Value::as_str).unwrap_or(&id).to_string(),
+                description: mode.get("description").and_then(Value::as_str).map(str::to_string),
+                id,
+            })
+        })
+        .collect();
+    if available.is_empty() {
+        return None;
+    }
+    Some(AgentEvent::ModesAvailable { session, current: current.to_string(), available })
+}
+
 fn terminal_spec_of_create(params: &Value) -> Result<TerminalSpec, String> {
     let program = params
         .get("command")
@@ -823,6 +888,19 @@ mod tests {
     use super::*;
 
     /// A translator that has completed the handshake and holds one session.
+    /// Handshake, then open a session with a caller-supplied `session/new` result.
+    fn connected_with(result: Value) -> (Translator, Vec<AgentEvent>) {
+        let mut t = Translator::new();
+        let init = t.initialize(ClientCapabilities::default());
+        let Message::Request { id, .. } = init else { panic!("initialize is a request") };
+        t.incoming(Message::Response { id, result: json!({}) });
+
+        let messages = t.outgoing(AgentRequest::NewSession { cwd: "/proj".into() });
+        let Message::Request { id, .. } = messages[0].clone() else { panic!() };
+        let (events, _) = t.incoming(Message::Response { id, result });
+        (t, events)
+    }
+
     fn connected() -> (Translator, SessionId) {
         let mut t = Translator::new();
         let init = t.initialize(ClientCapabilities::default());
@@ -1013,6 +1091,103 @@ mod tests {
             }
             other => panic!("expected a proposal, got {other:?}"),
         }
+    }
+
+    /// Codex opens its session in a read-only mode and offers `auto` and `full-access`
+    /// beside it. Parsing the session id and discarding the rest left it permanently
+    /// unable to edit, with no way to say so (ADR-0015).
+    #[test]
+    fn a_session_reports_the_modes_the_agent_offered() {
+        let (_, events) = connected_with(json!({
+            "sessionId": "s-1",
+            "modes": {
+                "currentModeId": "read-only",
+                "availableModes": [
+                    {"id": "read-only", "name": "Read Only", "description": "Can read files."},
+                    {"id": "auto", "name": "Default", "description": "Can read and edit."}
+                ]
+            }
+        }));
+
+        let (current, available) = events
+            .iter()
+            .find_map(|event| match event {
+                AgentEvent::ModesAvailable { current, available, .. } => {
+                    Some((current.clone(), available.clone()))
+                }
+                _ => None,
+            })
+            .expect("the modes reach the client");
+        assert_eq!(current, "read-only", "the session starts in the agent's choice");
+        assert_eq!(available.len(), 2);
+        assert_eq!(available[1].name, "Default");
+        assert_eq!(available[1].description.as_deref(), Some("Can read and edit."));
+    }
+
+    /// Most agents offer no modes at all, which is not a malformed session.
+    #[test]
+    fn a_session_without_modes_reports_none() {
+        let (_, events) = connected_with(json!({ "sessionId": "s-1" }));
+        assert!(
+            !events.iter().any(|e| matches!(e, AgentEvent::ModesAvailable { .. })),
+            "got {events:?}"
+        );
+    }
+
+    /// The client's view of the mode follows the agent's report, never its own request.
+    #[test]
+    fn the_agent_reporting_a_mode_change_is_what_moves_the_client() {
+        let (mut t, session) = connected();
+
+        let messages = t.outgoing(AgentRequest::SetMode { session, mode: "auto".into() });
+        assert!(
+            matches!(&messages[0], Message::Request { method, params, .. }
+                if method == "session/set_mode"
+                    && params["modeId"] == "auto"
+                    && params["sessionId"] == "s-1"),
+            "got {messages:?}"
+        );
+
+        let (events, _) = t.incoming(update(
+            "s-1",
+            json!({"sessionUpdate": "current_mode_update", "modeId": "auto"}),
+        ));
+        assert_eq!(events.as_slice(), [AgentEvent::ModeChanged { session, mode: "auto".into() }]);
+    }
+
+    /// codex-acp answers `session/set_mode` with a bare `{}` and never sends
+    /// `current_mode_update`. Believing only the notification would strand the pane on
+    /// `read-only` for the very agent session modes exist to unblock (ADR-0015 §5).
+    #[test]
+    fn a_bare_success_is_the_agent_saying_it_changed_the_mode() {
+        let (mut t, session) = connected();
+
+        let messages = t.outgoing(AgentRequest::SetMode { session, mode: "auto".into() });
+        let Message::Request { id, .. } = messages[0].clone() else { panic!("a request") };
+
+        let (events, _) = t.incoming(Message::Response { id, result: json!({}) });
+        assert_eq!(events.as_slice(), [AgentEvent::ModeChanged { session, mode: "auto".into() }]);
+    }
+
+    /// The other half of the same rule: an agent that refuses has not changed anything,
+    /// so the refusal is reported and the mode is left where the agent still has it.
+    #[test]
+    fn a_refused_mode_change_reports_the_refusal_and_moves_nothing() {
+        let (mut t, session) = connected();
+
+        let messages = t.outgoing(AgentRequest::SetMode { session, mode: "full-access".into() });
+        let Message::Request { id, .. } = messages[0].clone() else { panic!("a request") };
+
+        let (events, _) =
+            t.incoming(Message::Error { id, code: -32602, message: "unknown mode".into() });
+        assert!(
+            !events.iter().any(|e| matches!(e, AgentEvent::ModeChanged { .. })),
+            "got {events:?}"
+        );
+        assert!(
+            matches!(&events[0], AgentEvent::Failed { session: s, .. } if *s == session),
+            "got {events:?}"
+        );
     }
 
     #[test]

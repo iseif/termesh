@@ -166,6 +166,38 @@ pub fn render(frame: &mut Frame, model: &Model) {
                 t,
             );
         }
+        Some(Overlay::AgentModes(picker)) => {
+            // The description is the agent's own account of what the mode permits, and
+            // the only reliable one — so it is on the row, not hidden behind a preview.
+            let items: Vec<String> = picker
+                .modes
+                .iter()
+                .map(|mode| {
+                    let marker =
+                        if picker.current.as_deref() == Some(&mode.id) { "\u{25CF}" } else { " " };
+                    match &mode.description {
+                        Some(description) => {
+                            format!("{marker} {}  \u{2014} {description}", mode.name)
+                        }
+                        None => format!("{marker} {}", mode.name),
+                    }
+                })
+                .collect();
+            ui::overlays::search(
+                frame,
+                area,
+                ui::overlays::SearchView {
+                    title: "Agent Session Mode",
+                    query: "",
+                    items: &items,
+                    selected: picker.selected,
+                    status: "",
+                    hints: "Enter Set \u{00B7} Esc Close",
+                    preview: None,
+                },
+                t,
+            );
+        }
         Some(Overlay::Problems(problems)) => {
             let root = model.explorer.as_ref().map(|explorer| explorer.root.path.as_path());
             let items = problems
@@ -671,12 +703,54 @@ fn agent_body(model: &Model) -> String {
 
     // Never a bare header: a session with an empty transcript used to render as a blank
     // pane, which looks like the thing broke rather than like it is waiting for you.
-    let mut out = format!("\u{25CF} {name}\n\n{restored_history}");
+    // The mode belongs on screen because it is the answer to "why did nothing happen":
+    // an agent held in a read-only mode explains what it would change and then changes
+    // nothing, which is indistinguishable from a broken session unless the pane says so
+    // (ADR-0015 §2).
+    let mode = agent
+        .current_mode
+        .as_ref()
+        .map(|id| {
+            let label = agent
+                .modes
+                .iter()
+                .find(|mode| &mode.id == id)
+                .map(|mode| mode.name.as_str())
+                .unwrap_or(id.as_str());
+            format!("  mode: {label}  (F10 > Agent: Session Mode)\n")
+        })
+        .unwrap_or_default();
+    let mut out = format!("\u{25CF} {name}\n{mode}\n{restored_history}");
     if agent.transcript.is_empty() && agent.proposals.is_empty() && !agent.turn_active {
         out.push_str("Session open.\n\nAsk it something:\n  Enter (here)\n  F4  (anywhere)\n\n");
     }
 
-    // A tool call outranks everything else in the pane: the agent is blocked on it.
+    for terminal in &agent.attached_terminals {
+        if let Some(terminal) = model.terminals.iter().find(|candidate| candidate.id == *terminal) {
+            let status = match &terminal.status {
+                termesh_core::TerminalStatus::Starting => "starting".to_string(),
+                termesh_core::TerminalStatus::Running { .. } => "running".to_string(),
+                termesh_core::TerminalStatus::Exited(exit) => match exit.code {
+                    Some(code) => format!("exited {code}"),
+                    None => "exited".to_string(),
+                },
+                termesh_core::TerminalStatus::Failed(message) => format!("failed: {message}"),
+            };
+            let released = if terminal.released { ", released" } else { "" };
+            out.push_str(&format!(
+                "\u{25A3} {} ({status}{released})\n  retained in the Terminal pane\n\n",
+                terminal.title
+            ));
+        }
+    }
+
+    out.push_str(&transcript_text(&agent.transcript));
+
+    // Anything waiting on the human goes last, because this pane scrolls from the bottom
+    // and snaps back there on new content — so the end is what is on screen. These used to
+    // sit above the transcript, on the reasoning that what blocks the agent outranks the
+    // conversation. It does; but a long answer then pushed the accept/reject prompt off the
+    // top, and the reader never saw the thing they were being asked to decide.
     if let Some(pending) = &agent.pending_permission {
         out.push_str(&format!("\u{26A0} {}\n", pending.summary));
         let spec = match &pending.origin {
@@ -704,25 +778,6 @@ fn agent_body(model: &Model) -> String {
         out.push_str("  [y] allow once  [a] always  [n] deny\n\n");
     }
 
-    for terminal in &agent.attached_terminals {
-        if let Some(terminal) = model.terminals.iter().find(|candidate| candidate.id == *terminal) {
-            let status = match &terminal.status {
-                termesh_core::TerminalStatus::Starting => "starting".to_string(),
-                termesh_core::TerminalStatus::Running { .. } => "running".to_string(),
-                termesh_core::TerminalStatus::Exited(exit) => match exit.code {
-                    Some(code) => format!("exited {code}"),
-                    None => "exited".to_string(),
-                },
-                termesh_core::TerminalStatus::Failed(message) => format!("failed: {message}"),
-            };
-            let released = if terminal.released { ", released" } else { "" };
-            out.push_str(&format!(
-                "\u{25A3} {} ({status}{released})\n  retained in the Terminal pane\n\n",
-                terminal.title
-            ));
-        }
-    }
-
     for proposal in &agent.proposals {
         let clean = proposal.applicable().count();
         let conflicts = proposal.hunks.len() - clean;
@@ -735,10 +790,11 @@ fn agent_body(model: &Model) -> String {
     }
 
     if agent.turn_active {
-        out.push_str("\u{2026}thinking\n\n");
+        // The ellipsis trails the word, the way it reads aloud: "thinking…", not
+        // "…thinking", which looks like a truncated line rather than a state.
+        out.push_str("thinking\u{2026}\n\n");
     }
 
-    out.push_str(&transcript_text(&agent.transcript));
     out
 }
 

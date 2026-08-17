@@ -189,9 +189,13 @@
       </div>
       <div class="point">
         <h3>Agent-agnostic, by protocol</h3>
-        <p>An <a href="https://agentclientprotocol.com">ACP</a> client, so Claude Code, Codex,
-        Gemini CLI, OpenCode or Goose all plug in. Bring your own agent and model; no vendor is
-        assumed or bundled.</p>
+        <p>An <a href="https://agentclientprotocol.com">ACP</a> client: bring your own agent and
+        model, no vendor assumed or bundled. Inline diff review needs the agent to write through
+        the client rather than straight to disk, and of the agents tested so far — Codex,
+        <a href="https://junie.jetbrains.com/docs/junie-cli-acp.html">JetBrains Junie</a>,
+        opencode — none does; each edits the file itself and sends the diff only to be shown. The
+        <a href="https://github.com/iseif/termesh/blob/main/docs/support.md">support boundaries</a>
+        record what each did on the wire.</p>
       </div>
       <div class="point">
         <h3>It follows you onto a bare SSH box</h3>

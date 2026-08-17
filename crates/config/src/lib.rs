@@ -294,6 +294,9 @@ const DELIBERATE_SHADOWS: &[(KeyContext, KeyChord)] =
 
 #[cfg(test)]
 const PALETTE_ONLY: &[&str] = &[
+    // Changing what an agent may do should cost a deliberate trip through the palette,
+    // not a chord that can be hit by accident (ADR-0015 §3).
+    "agent.mode",
     "file.new",
     "file.new_folder",
     "file.rename",

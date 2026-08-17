@@ -28,6 +28,7 @@ before implementation. See [CONTRIBUTING.md](../../CONTRIBUTING.md).
 | [0012](0012-polyglot-workspaces.md) | Polyglot workspaces detect every root language and start sessions lazily | Accepted |
 | [0013](0013-java-language-support.md) | Java support uses wrapper-owned JDT LS launch and conventional build tasks | Accepted |
 | [0014](0014-beta-hardening.md) | Beta hardening: layered config, offered-not-applied crash recovery, and a published ACP session-restore boundary | Accepted |
+| [0015](0015-acp-session-modes.md) | ACP session modes are surfaced and changed explicitly, never escalated for you | Accepted |
 
 ## Reading the older ones
 

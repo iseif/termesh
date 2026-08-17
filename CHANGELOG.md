@@ -4,6 +4,40 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
+## Unreleased
+
+### Added
+
+- **ACP session modes.** An agent that offers modes — Codex opens read-only, with `auto` and
+  `full-access` beside it — reports them when the session starts, and the Agent pane shows which one
+  is active. `Agent: Session Mode` in the palette lists what the agent offers, in the agent's own
+  wording, and switches on request. termesh never changes the mode for you: an agent that defaults
+  to read-only is being careful, and overriding that from the client would defeat the reason it did.
+  Before this, a mode-aware agent was stuck in whatever it started in and could never be permitted
+  to edit (ADR-0015). This makes a read-only agent usable; it does not make its edits reviewable —
+  see the support boundaries for which agents route writes through the client.
+
+### Fixed
+
+- The support boundaries, README, and landing page said inline diff review was verified working
+  with JetBrains Junie. Recording the ACP session showed otherwise: Junie makes no
+  `fs/write_text_file` call and edits the file itself, as do Codex and opencode. All three send an
+  ACP `diff` block, which is why the change looks reviewed when it is not. No agent tested so far
+  routes writes through the client, and the docs now say so and name what each one did.
+- A `session/set_mode` the agent accepted with a bare success and no `current_mode_update` left the
+  Agent pane showing the old mode indefinitely. `codex-acp` answers exactly that way, so the pane
+  was stranded on `read-only` for the agent session modes exist to unblock. The success reply is
+  the agent's own report and now moves the client; a refusal still moves nothing.
+- The agent pane rendered a proposal's `[a]ccept`/`[r]eject` prompt, and any pending command
+  approval, *above* the transcript. The pane scrolls from the bottom and snaps back there on new
+  content, so a long answer pushed the decision off the top and out of view. Both now sit below the
+  answer that prompted them.
+- Accepting a proposal whose change the buffer already contains reported "nothing applied — every
+  hunk conflicted". Nothing had conflicted; the work was already done. It says so now, which
+  matters because an agent that writes directly to disk produces exactly this state.
+- The turn indicator read `…thinking`, with the ellipsis leading, which looks like a truncated line
+  rather than a state.
+
 ## 0.1.3 — 2026-08-17
 
 ### Fixed

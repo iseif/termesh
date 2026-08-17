@@ -81,6 +81,31 @@ grammars are post-beta work.
 - **The Windows binaries are not signed.** SmartScreen may warn on first run, and the warning is
   dismissible. `SHA256SUMS` on each release is the way to confirm you have the file this project
   published. The macOS binaries *are* signed and notarized — see below.
+- **Reviewable diffs depend on the agent asking this client to write, and no agent tested so far
+  does.** termesh advertises the ACP filesystem capability (`fs/writeTextFile`) and turns an
+  agent's write request into a proposal you accept or reject. An agent that edits files directly
+  instead has already changed the file by the time you see it, so the review becomes a
+  notification rather than a gate, and accepting reports that the buffer already matches. Nothing
+  on the client can prevent that. Each of these was checked by recording the ACP session and
+  comparing the file on disk before and after:
+
+  | Agent | Adapter | `fs/write_text_file` calls | File changed on disk |
+  |---|---|---|---|
+  | Codex (in `auto` mode) | `@zed-industries/codex-acp` | 0 | yes — written by the agent |
+  | JetBrains Junie | `junie --acp` | 0 | yes — written by the agent |
+  | opencode | native ACP | 0 | yes — written by the agent |
+
+  All three send an ACP `diff` content block, which is why the change is visible; it is a display
+  payload, not a request to write. The client's review path — proposal, per-hunk accept, rebase on
+  a version conflict — is implemented and covered by the protocol and review-loop tests, and it
+  engages for any agent that does route writes through the client. None of the ones above do.
+- **An agent that offers ACP session modes starts in whichever one it chose**, and termesh does not
+  change that for you. Codex opens `read-only` and declines to edit until you move the session with
+  `Agent: Session Mode` in the action palette; moving it to `auto` lets Codex edit, but — per the
+  table above — it still writes directly, so this buys you a working agent, not a reviewable one.
+  The current mode is shown in the Agent pane. Note that `codex-acp` answers `session/set_mode`
+  with a bare success and sends no `current_mode_update`, so the pane follows the success reply
+  (ADR-0015 §5).
 - An ACP agent session does not survive restart. The client restores workspaces, buffers, the
   active tab, pane geometry, terminal working directories, and read-only transcript history, then
   starts a fresh agent session. The implemented ACP baseline has no usable session-load path;

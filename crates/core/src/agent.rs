@@ -75,6 +75,15 @@ pub enum AgentRequest {
     NewSession {
         cwd: PathBuf,
     },
+    /// Move the session to one of the modes the agent offered (ADR-0015).
+    ///
+    /// Only ever sent because a human asked for it. The agent's default stands until
+    /// then, including when that default forbids the edit the agent was just asked to
+    /// make — a client that widens its own permissions on refusal is not asking.
+    SetMode {
+        session: SessionId,
+        mode: String,
+    },
     /// A user turn. `context` is the workspace snapshot rendered as text and prepended —
     /// small and current, because everything bulky is *pulled* on demand instead
     /// (ADR-0007 §4).
@@ -112,6 +121,18 @@ pub enum AgentRequest {
     Shutdown,
 }
 
+/// One entry from an agent's `availableModes`.
+///
+/// `description` is the agent's own wording for what the mode permits, which is the only
+/// trustworthy account of it: `auto` and `full-access` mean whatever that agent decided,
+/// and the client must not infer permissions from the name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionMode {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+}
+
 /// What comes back *from* the agent.
 ///
 /// Exhaustive on purpose, like `FsEvent`: adding a variant should break every loop that
@@ -125,6 +146,19 @@ pub enum AgentEvent {
     },
     SessionStarted {
         session: SessionId,
+    },
+    /// What the agent will let this session do, and which of those it started in
+    /// (ADR-0015). Absent for agents that do not offer modes, which is most of them.
+    ModesAvailable {
+        session: SessionId,
+        current: String,
+        available: Vec<SessionMode>,
+    },
+    /// The agent reports the session is now in `mode`. The agent's account is the truth,
+    /// so this is what updates the client — not the response to our own request.
+    ModeChanged {
+        session: SessionId,
+        mode: String,
     },
     /// Streamed assistant text.
     MessageChunk {

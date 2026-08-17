@@ -18,7 +18,8 @@ pub mod task;
 pub mod terminal;
 
 pub use agent::{
-    AgentCapabilities, AgentEvent, AgentRequest, PermissionDecision, PromptCapabilities, StopReason,
+    AgentCapabilities, AgentEvent, AgentRequest, PermissionDecision, PromptCapabilities,
+    SessionMode, StopReason,
 };
 pub use fs::{DirEntryInfo, EntryKind, FsError, FsEvent, FsRequest, FsResult};
 pub use git::{
@@ -147,6 +148,7 @@ pub enum Action {
     EditorApplyTransaction,
     AgentSessionNew,
     AgentPrompt,
+    AgentMode,
     AgentProposalAccept,
     AgentProposalReject,
     HelpShow,
@@ -203,6 +205,7 @@ impl Action {
             Action::EditorApplyTransaction => "editor.apply_transaction",
             Action::AgentSessionNew => "agent.session.new",
             Action::AgentPrompt => "agent.prompt",
+            Action::AgentMode => "agent.mode",
             Action::AgentProposalAccept => "agent.proposal.accept",
             Action::AgentProposalReject => "agent.proposal.reject",
             Action::HelpShow => "help.show",
@@ -261,6 +264,7 @@ impl Action {
             Action::EditorApplyTransaction => "Apply Edit",
             Action::AgentSessionNew => "New Agent Session",
             Action::AgentPrompt => "Prompt Agent",
+            Action::AgentMode => "Agent: Session Mode",
             Action::AgentProposalAccept => "Accept Agent Edit",
             Action::AgentProposalReject => "Reject Agent Edit",
             Action::HelpShow => "Help: Keys and Actions",
@@ -279,6 +283,9 @@ impl Action {
                 | Action::FileDelete
                 | Action::WorkspaceRestoreDrafts
                 | Action::TerminalRun
+                // Changing the mode changes what the agent is allowed to do, which is
+                // exactly the sort of thing it should not be able to do for itself.
+                | Action::AgentMode
                 | Action::GitStage
                 | Action::GitUnstage
                 | Action::GitCommit
@@ -476,6 +483,7 @@ impl ActionRegistry {
                 EditorApplyTransaction,
                 AgentSessionNew,
                 AgentPrompt,
+                AgentMode,
                 AgentProposalAccept,
                 AgentProposalReject,
                 HelpShow,
@@ -504,7 +512,7 @@ mod tests {
     #[test]
     fn registry_exposes_stable_action_ids() {
         let reg = ActionRegistry::with_defaults();
-        assert_eq!(reg.len(), 50);
+        assert_eq!(reg.len(), 51);
         assert!(reg.ids().any(|id| id == "agent.prompt"));
         assert!(reg.ids().any(|id| id == "focus.project"));
         assert!(reg.ids().all(|id| id.contains('.')));
