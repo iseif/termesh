@@ -4,6 +4,16 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
+## Unreleased
+
+### Fixed
+
+- `termesh --version` printed `termesh 0.1.1 (unknown)` for any binary not built by CI, including
+  every `cargo install`. The parenthetical is the commit the build was stamped with, which only a
+  release build has; "unknown" read like a fault rather than the ordinary case. A build with no
+  commit now prints the version and stops. Release binaries are unchanged and still carry the
+  short commit.
+
 ## 0.1.1 — 2026-08-17
 
 ### Fixed

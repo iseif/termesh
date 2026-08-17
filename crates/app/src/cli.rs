@@ -177,13 +177,23 @@ impl Cli {
 pub const VERSION_LINE: &str = concat!(env!("CARGO_PKG_NAME"), " ", env!("CARGO_PKG_VERSION"));
 
 pub fn version_line() -> String {
-    let commit = option_env!("TERMESH_GIT_COMMIT")
-        .or(option_env!("GITHUB_SHA"))
-        .unwrap_or("unknown")
-        .chars()
-        .take(12)
-        .collect::<String>();
-    format!("{VERSION_LINE} ({commit})")
+    // Stamped at compile time; CI supplies `GITHUB_SHA`, and a release build is the only
+    // one that has a commit to report.
+    format_version(option_env!("TERMESH_GIT_COMMIT").or(option_env!("GITHUB_SHA")))
+}
+
+/// Split out so both branches are testable: `option_env!` resolves during compilation, so
+/// a test cannot arrange for one to be absent.
+fn format_version(commit: Option<&str>) -> String {
+    // No commit means this was built outside CI — from a `cargo install`, or a source
+    // tree. Saying "(unknown)" answers a question the user did not ask with a word that
+    // sounds like something is wrong; the version alone is the whole truth available.
+    match commit {
+        Some(commit) => {
+            format!("{VERSION_LINE} ({})", commit.chars().take(12).collect::<String>())
+        }
+        None => VERSION_LINE.to_string(),
+    }
 }
 
 pub const HELP: &str = concat!(
@@ -420,9 +430,17 @@ mod tests {
         // a test edit, and it caught nothing — what is worth holding is that the line
         // still tracks Cargo.toml and has not become a hand-updated copy.
         assert_eq!(VERSION_LINE, format!("termesh {}", env!("CARGO_PKG_VERSION")));
-        let line = version_line();
-        assert!(line.starts_with(VERSION_LINE));
-        assert!(line.ends_with(')'), "name version (commit): {line}");
+        assert!(version_line().starts_with(VERSION_LINE));
+
+        // A release build reports the commit CI stamped, abbreviated.
+        assert_eq!(
+            format_version(Some("7c27cd0d04d9aaaabbbbcccc")),
+            format!("{VERSION_LINE} (7c27cd0d04d9)")
+        );
+        // Anything else reports the version and stops. 0.1.1 and earlier printed
+        // "(unknown)" here, which reads like a fault rather than the ordinary case of a
+        // binary built from the registry.
+        assert_eq!(format_version(None), VERSION_LINE);
     }
 
     #[test]
