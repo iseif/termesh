@@ -4,7 +4,7 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
-## Unreleased
+## 0.1.3 — 2026-08-17
 
 ### Fixed
 
@@ -20,6 +20,21 @@ described in [docs/configuration.md](docs/configuration.md).
   stream per token, and every notification was read as "still working" — including the `end` that
   means finished. The indicator now clears when the last outstanding unit of work ends, and still
   shows progress while any remains.
+
+Both are worth taking if you use termesh on a Rust project: before this, rust-analyzer never
+reached a steady state and kept re-running `cargo check` in the background.
+
+### Install
+
+Prebuilt binaries for Linux (x86-64, AArch64), macOS (Intel, Apple Silicon) and Windows (x86-64)
+are attached to this release, with `SHA256SUMS`. The macOS builds are signed and notarized. From
+source:
+
+```bash
+cargo install termesh --locked
+```
+
+Requires Rust 1.88 or newer.
 
 ## 0.1.2 — 2026-08-17
 
