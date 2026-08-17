@@ -77,15 +77,27 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         shell: bash
         run: |
-          if [[ -n "$MACOS_CERTIFICATE" && -n "$MACOS_CERTIFICATE_PASSWORD" && -n "$MACOS_SIGNING_IDENTITY" ]]; then
-            echo "signing=true" >> "$GITHUB_OUTPUT"
-          else
+          # All six or none. Signing without notarizing is the dangerous middle: it
+          # produces a binary that Gatekeeper still refuses, from a green run, so the one
+          # state that looks finished without being finished is the one to refuse.
+          missing=()
+          present=()
+          for name in MACOS_CERTIFICATE MACOS_CERTIFICATE_PASSWORD MACOS_SIGNING_IDENTITY \
+                      APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD; do
+            if [[ -n "${!name}" ]]; then present+=("$name"); else missing+=("$name"); fi
+          done
+
+          if (( ${#present[@]} == 0 )); then
+            echo "No macOS signing credentials set — shipping unsigned (docs/support.md)."
             echo "signing=false" >> "$GITHUB_OUTPUT"
-          fi
-          if [[ -n "$MACOS_CERTIFICATE" && -n "$MACOS_CERTIFICATE_PASSWORD" && -n "$MACOS_SIGNING_IDENTITY" && -n "$APPLE_ID" && -n "$APPLE_TEAM_ID" && -n "$APPLE_APP_PASSWORD" ]]; then
+            echo "notarization=false" >> "$GITHUB_OUTPUT"
+          elif (( ${#missing[@]} == 0 )); then
+            echo "signing=true" >> "$GITHUB_OUTPUT"
             echo "notarization=true" >> "$GITHUB_OUTPUT"
           else
-            echo "notarization=false" >> "$GITHUB_OUTPUT"
+            echo "::error::macOS signing is half configured. Set all six secrets or none." \
+                 "Missing: ${missing[*]}"
+            exit 1
           fi
 
       - name: Import the macOS signing certificate
