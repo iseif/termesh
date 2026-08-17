@@ -8,6 +8,9 @@
 
 **A terminal-native, agent-first IDE.** The AI coding agent is a first-class occupant of the workspace — sharing your open buffers, LSP diagnostics, git diff, and terminal output — not a chat box bolted to the side. Built as an [ACP](https://agentclientprotocol.com) client, so any compatible agent (Claude Code, Codex, Gemini CLI, OpenCode, Goose) plugs in. Runs anywhere a terminal runs: SSH, containers, minimal servers.
 
+![termesh opening a project, quick-opening a file, showing git changes, and reporting a
+rust-analyzer diagnostic](site/img/demo.gif)
+
 ## Why this exists
 
 The terminal already has great focused tools (Helix, Zellij, Yazi, lazygit) and mature projects that orchestrate them into an IDE-like layout. Re-building *that* adds nothing. Our one reason to exist is the part nobody has built well in the terminal:
@@ -49,79 +52,27 @@ Building from source instead is [described below](#build-from-source).
 
 ## What it looks like
 
-Real output, not a mock — and reproducible on your machine, with no terminal, no language server,
-and no agent involved.
+![a rust-analyzer diagnostic in the gutter, the offending line underlined, and the error
+count in the status bar](site/img/diagnostics.png)
 
-A diagnostic in the gutter, a hover explaining it, and the error count in the status bar
-(`termesh --dump-frame . --lsp-demo`):
+![the Git Changes overlay listing a modified file, with stage, commit and branch on the
+footer](site/img/git.png)
 
-```text
-┌ Project ──────────┐┌ ● main.rs ─────────────────────────────────────┐┌ Agent ────────────────┐
-│▾ termesh-lsp-demo ││ 1E fn main() -> i32 { "wrong" }                ││No agent configured.   │
-│  ▸ src            ││ 2                   ┌ Hover ───────────────────┐│                       │
-│    Cargo.toml     ││                     │mismatched types          ││Define one in          │
-│                   ││                     │expected i32, found &str  ││agents.toml under your │
-│                   ││                     └──────────────────────────┘│config dir. See the    │
-│                   ││                                                ││README for the shape.  │
-│                   ││                                                ││                       │
-│                   ││                                                ││Or press F6 and run    │
-│                   ││                                                ││any AI CLI in a        │
-│                   ││                                                ││terminal.              │
-│                   ││                                                ││                       │
-│                   ││                                                ││                       │
-│                   ││                                                ││                       │
-│                   ││                                                ││                       │
-│                   ││                                                ││                       │
-│                   ││                                                ││                       │
-│                   │└────────────────────────────────────────────────┘│                       │
-│                   │┌ Terminal ──────────────────────────────────────┐│                       │
-│                   ││$                                               ││                       │
-│                   ││                                                ││                       │
-│                   ││No terminal open.                               ││                       │
-│                   ││Use F6 or the command palette to start one.     ││                       │
-│                   ││                                                ││                       │
-│                   ││                                                ││                       │
-│                   ││                                                ││                       │
-└───────────────────┘└────────────────────────────────────────────────┘└───────────────────────┘
- Ctrl+P Files   F9 Search   F10 Actions termesh-lsp-demo (rust)   focus: Editor   1:20   1 error
+Those are real screenshots, and so is the recording above — all three are produced by
+`./scripts/record-demo.sh`, which builds a throwaway project and drives the editor with real
+key chords, so they can be regenerated rather than going stale.
+
+If you would rather not take anyone's word for any of it, the same interface renders headlessly —
+no terminal, no language server, no agent, byte-identical on any machine:
+
+```bash
+termesh --dump-frame . --lsp-demo        # a diagnostic, a hover, the error count
+termesh --dump-frame . --git-demo        # conflicts, staged and worktree groups
+termesh --dump-frame . --agent-demo --open README.md
 ```
 
-Git status as conflicts, staged, and worktree groups (`termesh --dump-frame . --git-demo`):
-
-```text
-┌ ● Project ────────┐┌ Editor ────────────────────────────────────────┐┌ Agent ────────────────┐
-│▾ termesh-git-demo ││No file open.                                   ││No agent configured.   │
-│                   ││                                                ││                       │
-│           ┌ Git Changes ─────────────────────────────────────────────────────────┐n          │
-│           │  Conflicts                                                           │under your │
-│           │▶ UU conflict.rs                                                      │See the    │
-│           │  Staged                                                              │he shape.  │
-│           │  M  src/staged.rs                                                    │           │
-│           │  Changes                                                             │and run    │
-│           │   M src/worktree.rs                                                  │n a        │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │                                                                      │           │
-│           │Enter Diff · s Stage · u Unstage · c Commit · b Branch · Esc Close    │           │
-│           └──────────────────────────────────────────────────────────────────────┘           │
-│                   ││                                                ││                       │
-└───────────────────┘└────────────────────────────────────────────────┘└───────────────────────┘
- Ctrl+P Files   F termesh-git-demo (rust)   focus: Project   branch: main ↑2 ↓1 ~3 !1   0 errors
-```
-
-Both run against synthetic workspaces, which is why they come out byte-identical anywhere. The
-remaining flags — `--agent-demo`, `--terminal-demo`, `--search-task-demo`, `--polyglot-demo`,
-`--java-demo` — are listed further down.
+`--terminal-demo`, `--search-task-demo`, `--polyglot-demo` and `--java-demo` do the same for the
+rest.
 
 ## Agent integration is tiered (so the bet is de-risked)
 

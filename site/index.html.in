@@ -114,6 +114,14 @@
   .point p { margin: 0; color: var(--muted); font-size: 0.95rem; }
 
   figure { margin: 0 0 2rem; }
+  figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 9px;
+    border: 1px solid var(--rule);
+    background: var(--term-bg);
+  }
   figcaption {
     color: var(--muted);
     font-size: 0.88rem;
@@ -217,30 +225,40 @@
   <div class="wrap">
     <h2>What it actually looks like</h2>
     <p class="lede">
-      Every frame below is real program output, rendered while this page was built — not a
-      screenshot and not a drawing. Each one is reproducible on your machine with no terminal, no
-      language server and no agent involved.
+      A real session: opening a project, quick-opening a file, reviewing git changes, and a
+      rust-analyzer diagnostic arriving. Recorded by driving the editor with real key chords, so
+      it can be regenerated rather than going stale.
     </p>
 
     <figure>
-      <figcaption>An agent proposal waiting for review — the gutter marks the changed line, the
-      pane offers accept and reject. <code>termesh --dump-frame . --open README.md --agent-demo</code></figcaption>
-      <div class="frame"><pre>{{FRAME_AGENT}}</pre></div>
+      <img src="img/demo.gif" alt="termesh opening a project, quick-opening a file, showing the
+      Git Changes overlay, and reporting a rust-analyzer diagnostic" loading="lazy">
     </figure>
 
     <figure>
-      <figcaption>A diagnostic in the gutter, a hover explaining it, and the error count in the
-      status bar. <code>termesh --dump-frame . --lsp-demo</code></figcaption>
+      <img src="img/diagnostics.png" alt="A rust-analyzer diagnostic marked in the gutter with the
+      offending line underlined, and the error count in the status bar" loading="lazy">
+      <figcaption>The language server reports; the gutter marks it, the line is underlined, and
+      the status bar counts it. The agent sees the same diagnostics you do.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="img/git.png" alt="The Git Changes overlay listing a modified file, with stage,
+      unstage, commit and branch actions on the footer" loading="lazy">
+      <figcaption>Git runs on its own worker and never blocks rendering. Commits use the index as
+      an exact boundary — no implicit <code>add</code>.</figcaption>
+    </figure>
+
+    <p class="lede">
+      Nothing above needs taking on trust. The same interface renders headlessly, with no terminal,
+      no language server and no agent involved — this frame was produced while the page was built:
+    </p>
+
+    <figure>
+      <figcaption><code>termesh --dump-frame . --lsp-demo</code></figcaption>
       <div class="frame"><pre>{{FRAME_LSP}}</pre></div>
     </figure>
-
-    <figure>
-      <figcaption>Git status as conflicts, staged and worktree groups, with an explicit-index
-      commit behind <code>c</code>. <code>termesh --dump-frame . --git-demo</code></figcaption>
-      <div class="frame"><pre>{{FRAME_GIT}}</pre></div>
-    </figure>
-  </div>
-</section>
+  </section>
 
 <section>
   <div class="wrap">

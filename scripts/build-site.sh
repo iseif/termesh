@@ -45,11 +45,9 @@ frame() {
 }
 
 log "rendering frames from $("$BIN" --version)"
-frame . --open README.md --agent-demo > "$OUT/.frame_agent"
-frame . --lsp-demo                     > "$OUT/.frame_lsp"
-frame . --git-demo                     > "$OUT/.frame_git"
+frame . --lsp-demo > "$OUT/.frame_lsp"
 
-for f in agent lsp git; do
+for f in lsp; do
   [[ -s "$OUT/.frame_$f" ]] || fail "the $f frame came out empty"
 done
 
@@ -60,17 +58,20 @@ import os
 out = os.environ["OUT"]
 page = open("site/index.html.in").read()
 page = page.replace("{{VERSION}}", os.environ["VERSION"])
-for name in ("agent", "lsp", "git"):
+for name in ("lsp",):
     with open(f"{out}/.frame_{name}") as handle:
         page = page.replace("{{FRAME_%s}}" % name.upper(), handle.read().rstrip("\n"))
-leftover = [tag for tag in ("{{VERSION}}", "{{FRAME_AGENT}}", "{{FRAME_LSP}}", "{{FRAME_GIT}}")
-            if tag in page]
+leftover = [tag for tag in ("{{VERSION}}", "{{FRAME_LSP}}") if tag in page]
 if leftover:
     raise SystemExit(f"unsubstituted placeholders remain: {leftover}")
 open(f"{out}/index.html", "w").write(page)
 PY
 
 rm -f "$OUT"/.frame_*
+# The recording and stills are committed (they need a real terminal to produce, which a
+# CI runner building this page does not have), so they are copied rather than regenerated.
+mkdir -p "$OUT/img"
+cp site/img/*.gif site/img/*.png "$OUT/img/"
 log "wrote $OUT/index.html ($(wc -c < "$OUT/index.html" | tr -d ' ') bytes)"
 
 if [[ "${1:-}" == "--open" ]]; then

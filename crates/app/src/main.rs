@@ -8054,47 +8054,38 @@ mod headless_demo {
         assert!(hunk_frame.contains('~'), "the diff hunk mark survives: {hunk_frame}");
     }
 
-    /// The README shows two frames and calls them real output. They were real when pasted;
-    /// the mock they replaced was drawn by hand and had drifted away from the actual UI,
-    /// which is the failure this guards against. Both demos run against synthetic
-    /// workspaces, so their frames are byte-identical anywhere and can simply be compared.
-    ///
-    /// If this fails after a deliberate UI change, repaste from the command in the README —
-    /// do not relax the assertion.
+    /// The README used to paste a rendered frame, and a test held it to the real output —
+    /// the drawing it replaced had drifted because nothing checked it. The frames are gone
+    /// now (a GIF and two screenshots say it better, and `record-demo.sh` regenerates
+    /// those), but the README still tells the reader which flags to run. A flag that was
+    /// renamed or dropped would leave it quietly advertising something that no longer
+    /// exists, so the names are checked against the help text, which is the CLI's own list.
     #[test]
-    fn the_readme_frames_are_still_what_the_demos_render() {
+    fn every_demo_flag_the_readme_names_still_exists() {
         let readme = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../README.md")
             .canonicalize()
             .expect("README.md sits at the workspace root");
-        // Normalised because the repository has no `.gitattributes`, so Git for Windows
-        // checks markdown out with CRLF while the rendered frame is always LF. Without
-        // this the test is green on Unix and red on Windows for a reason that has nothing
-        // to do with whether the README is accurate.
+        // Normalised: with no `.gitattributes`, Git for Windows checks markdown out as CRLF.
         let readme = std::fs::read_to_string(readme).unwrap().replace("\r\n", "\n");
 
-        // `--dump-frame` renders at 96x28; the README copies have trailing spaces stripped
-        // because editors and pre-commit hooks remove them from markdown anyway.
-        let rendered = |demo: fn(&mut Model)| {
-            let mut model = Model::new();
-            demo(&mut model);
-            view::snapshot(&mut model, 96, 28)
-                .lines()
-                .map(str::trim_end)
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
+        let mut named: Vec<&str> = readme
+            .split("--")
+            .filter_map(|rest| {
+                let flag = rest.split(|c: char| !(c.is_ascii_lowercase() || c == '-')).next()?;
+                flag.ends_with("-demo").then_some(flag)
+            })
+            .collect();
+        named.sort_unstable();
+        named.dedup();
+        assert!(!named.is_empty(), "the README should name the demo flags");
 
-        for (flag, demo) in
-            [("--lsp-demo", run_lsp_demo as fn(&mut Model)), ("--git-demo", run_git_demo)]
-        {
-            let frame = rendered(demo);
-            assert!(
-                readme.contains(frame.trim_end()),
-                "README no longer shows what `termesh --dump-frame . {flag}` renders. \
-                 Current output:\n{frame}"
-            );
-        }
+        let missing: Vec<&&str> =
+            named.iter().filter(|flag| !crate::cli::HELP.contains(&format!("--{flag}"))).collect();
+        assert!(
+            missing.is_empty(),
+            "the README names demo flags the CLI does not offer: {missing:?}"
+        );
     }
 
     #[test]

@@ -119,7 +119,15 @@ impl IgnoreRules {
         candidates.sort_by_key(|(dir, _)| std::cmp::Reverse(dir.components().count()));
 
         for (_, matcher) in candidates {
-            let m = matcher.matched(path, is_dir);
+            // `matched` tests only the path itself, so a rule naming a directory —
+            // `target` — hid `target` and nothing beneath it. The tree never noticed,
+            // because it asks about a directory before descending and stops there. The
+            // watcher did: the OS hands it deep paths, so every file cargo wrote under
+            // `target` looked like a real change, reached the language server as a
+            // watched-file notification, and made rust-analyzer re-analyse — which runs
+            // cargo check, which writes to `target` again. The `starts_with` filter above
+            // guarantees the path is under this matcher's root, which this call requires.
+            let m = matcher.matched_path_or_any_parents(path, is_dir);
             if m.is_ignore() {
                 return true;
             }
@@ -228,6 +236,26 @@ mod tests {
 
     fn default_rules(files: &[(&str, &str)]) -> IgnoreRules {
         rules(files, IgnoreOptions::default())
+    }
+
+    /// A `.gitignore` naming a directory has to hide everything under it, not just the
+    /// directory entry. The tree never noticed, because it asks about `target` before
+    /// descending and stops there — but the file watcher is handed deep paths straight
+    /// from the OS, so `target/debug/deps/x.rlib` was reported as a real change. On a
+    /// Rust project that is thousands of events per build, forwarded to the language
+    /// server as watched-file changes, which makes rust-analyzer re-analyse, which runs
+    /// cargo check, which writes to `target` again.
+    #[test]
+    fn an_ignored_directory_hides_the_files_underneath_it() {
+        let rules = default_rules(&[("/r/.gitignore", "target\n")]);
+
+        assert!(rules.is_hidden(Path::new("/r/target"), true), "the directory itself");
+        assert!(rules.is_hidden(Path::new("/r/target/debug"), true), "a directory inside it");
+        assert!(
+            rules.is_hidden(Path::new("/r/target/debug/deps/orders.rlib"), false),
+            "a file several levels down"
+        );
+        assert!(!rules.is_hidden(Path::new("/r/src/main.rs"), false), "and nothing else");
     }
 
     #[test]
