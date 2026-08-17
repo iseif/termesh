@@ -42,6 +42,12 @@ disk images, and installer packages — so Gatekeeper resolves the ticket online
 binary runs. On a machine with no network at that moment, launching may be refused until it can
 check once. This is ordinary for a notarized command-line tool.
 
+That also means the `=notarized` check above is an online lookup, and Apple takes a few minutes
+after notarizing to serve a new ticket. Running it against a release published moments ago can
+report `code failed to satisfy specified code requirement(s)` for a binary that is perfectly
+notarized; wait and run it again. The signature check on the line above it is local and answers
+immediately either way.
+
 `spctl --assess --type execute` reports `rejected (the code is valid but does not seem to be an
 app)` for these binaries. That is `spctl` objecting to a bare executable rather than an app bundle,
 not a notarization failure; the `=notarized` requirement above is the check that answers the
