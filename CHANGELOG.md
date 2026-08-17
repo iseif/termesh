@@ -4,7 +4,7 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
-## Unreleased
+## 0.1.4 — 2026-08-17
 
 ### Added
 
@@ -37,6 +37,23 @@ described in [docs/configuration.md](docs/configuration.md).
   matters because an agent that writes directly to disk produces exactly this state.
 - The turn indicator read `…thinking`, with the ellipsis leading, which looks like a truncated line
   rather than a state.
+
+Worth taking if you use an ACP agent, and worth reading if you were relying on the review loop:
+the client's half is implemented and tested, but no agent tried so far — Codex, Junie, opencode —
+actually routes its writes through it, so their edits land on disk before you see them. The
+[support boundaries](docs/support.md) record what each one did on the wire.
+
+### Install
+
+Prebuilt binaries for Linux (x86-64, AArch64), macOS (Intel, Apple Silicon) and Windows (x86-64)
+are attached to this release, with `SHA256SUMS`. The macOS builds are signed and notarized. From
+source:
+
+```bash
+cargo install termesh --locked
+```
+
+Requires Rust 1.88 or newer.
 
 ## 0.1.3 — 2026-08-17
 
