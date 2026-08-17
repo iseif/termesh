@@ -15,6 +15,21 @@ described in [docs/configuration.md](docs/configuration.md).
   A test scans screen text for that vocabulary so it cannot come back, and the pane's snapshot test
   now asserts the fallback rather than only the setup instructions.
 
+Nothing else changed: no behaviour, no configuration, no dependency. Upgrading from 0.1.0 is
+optional, and the [support boundaries](docs/support.md) are unchanged — the macOS binaries are
+still unsigned, so a browser download needs `xattr -d com.apple.quarantine ./termesh`.
+
+### Install
+
+Prebuilt binaries for Linux (x86-64, AArch64), macOS (Intel, Apple Silicon), and Windows (x86-64)
+are attached to this release, with `SHA256SUMS`. From source:
+
+```bash
+cargo install termesh --locked
+```
+
+Requires Rust 1.88 or newer.
+
 ## 0.1.0 — 2026-08-16
 
 First public release. The whole product ships at once because the parts only mean something
