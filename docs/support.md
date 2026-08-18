@@ -112,7 +112,16 @@ grammars are post-beta work.
 
   Accepting does **not** make termesh write the file: the agent does that itself, and the buffer
   reloads when it lands. Per-hunk accept is not offered here, because a permission is one answer
-  for the whole edit (ADR-0016).
+  for the whole edit (ADR-0016). To check the chain against your own agent:
+
+  ```bash
+  TERMESH_TEST_AGENT="opencode acp" TERMESH_TEST_EDIT=1 \
+    cargo test -p termesh-agent --test live_agent -- --ignored --nocapture
+  ```
+
+  That sends a real prompt, so it invokes a model. It passes when the agent asks before editing
+  and the file is still untouched at that moment, and fails with what it found on disk when the
+  agent wrote first.
 - **The reviewable mode is the restrictive one, and it is not the default.** An agent that offers
   ACP session modes starts in whichever one it chose, and termesh does not change that for you.
   Codex opens `read-only`, which is the mode in which it asks before editing — so that is the mode
