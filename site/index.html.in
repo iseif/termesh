@@ -190,12 +190,13 @@
       <div class="point">
         <h3>Agent-agnostic, by protocol</h3>
         <p>An <a href="https://agentclientprotocol.com">ACP</a> client: bring your own agent and
-        model, no vendor assumed or bundled. Inline diff review needs the agent to write through
-        the client rather than straight to disk, and of the agents tested so far — Codex,
-        <a href="https://junie.jetbrains.com/docs/junie-cli-acp.html">JetBrains Junie</a>,
-        opencode — none does; each edits the file itself and sends the diff only to be shown. The
+        model, no vendor assumed or bundled. Inline diff review engages when the agent checks with
+        the client before touching the file — verified against Codex in read-only and
+        <a href="https://opencode.ai">opencode</a> with <code>permission.edit: "ask"</code>, where
+        rejecting leaves the file byte-identical. Agents that edit first still show the diff, but
+        as a record rather than a gate; the
         <a href="https://github.com/iseif/termesh/blob/main/docs/support.md">support boundaries</a>
-        record what each did on the wire.</p>
+        say which is which.</p>
       </div>
       <div class="point">
         <h3>It follows you onto a bare SSH box</h3>

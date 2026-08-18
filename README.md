@@ -6,7 +6,7 @@
 > [support boundaries](docs/support.md) before you rely on it — they are specific about what is
 > tested and what is not.
 
-**A terminal-native, agent-first IDE.** The AI coding agent is a first-class occupant of the workspace — sharing your open buffers, LSP diagnostics, git diff, and terminal output — not a chat box bolted to the side. Built as an [ACP](https://agentclientprotocol.com) client, so it is agent-agnostic — bring your own. Inline diff review needs the agent to write *through* the client rather than straight to disk, and of the ACP agents tested so far — Codex, [JetBrains Junie](https://junie.jetbrains.com/docs/junie-cli-acp.html), opencode — **none does**: each edits the file itself and sends the diff only to be displayed. The review path is implemented and covered end to end against the protocol; the [support boundaries](docs/support.md) record what each agent actually did on the wire. Runs anywhere a terminal runs: SSH, containers, minimal servers.
+**A terminal-native, agent-first IDE.** The AI coding agent is a first-class occupant of the workspace — sharing your open buffers, LSP diagnostics, git diff, and terminal output — not a chat box bolted to the side. Built as an [ACP](https://agentclientprotocol.com) client, so it is agent-agnostic — bring your own. Inline diff review works when the agent checks with the client before touching the file — verified end to end against Codex in read-only and [opencode](https://opencode.ai) with `permission.edit: "ask"`, where rejecting leaves the file byte-identical. Agents that edit first and report afterwards still show you the diff, but as a record rather than a gate. The [support boundaries](docs/support.md) say which is which, and give you a command to test your own. Runs anywhere a terminal runs: SSH, containers, minimal servers.
 
 ![termesh opening a project, quick-opening a file, showing git changes, and reporting a
 rust-analyzer diagnostic](site/img/demo.gif)
@@ -186,11 +186,30 @@ command = ["some-agent", "--acp"]   # argv, never a shell string
 ```
 
 Then press **F4** — or **Tab** to the Agent pane and press **Enter** — and type your question.
-A session opens by itself. The agent reads your files *through
-the editor* — live buffers, unsaved edits included — and its proposed changes arrive as inline
-accept/reject hunks marked in the gutter (`~` replaced, `+` added, `!` collided with your own
-edit). `a` accepts, `r` rejects, and one Ctrl+Z takes the whole proposal back. Nothing touches disk
-until you accept, and a change you have edited inside is flagged rather than applied over.
+A session opens by itself. The agent reads your files *through the editor* — live buffers,
+unsaved edits included — and changes arrive as inline accept/reject hunks marked in the gutter
+(`~` replaced, `+` added, `!` collided with your own edit). `a` accepts, `r` rejects.
+
+**Whether you get to decide before the file changes depends on the agent, and usually on how you
+configure it.** Review is real when the agent asks the client first — either by writing through it,
+or by requesting permission and describing the change. An agent that just edits the file has
+already done it by the time you look. Two that will ask:
+
+```jsonc
+// opencode: in the project's opencode.json — without this it edits unasked
+{ "permission": { "edit": "ask" } }
+```
+
+```text
+Codex: leave the session in read-only, its default. That is the mode in which it
+asks before editing — so it is the mode in which its edits can be reviewed.
+"Agent: Session Mode" in the palette shows and changes it.
+```
+
+Set that up and rejecting genuinely means the file is never touched; accepting lets the agent make
+the change, and your buffer reloads when it lands. Without it you still see the diff, but as a
+report of something already done. The [support boundaries](docs/support.md) list what each agent
+was measured doing, and give a command that answers the question for yours.
 
 With no agent configured the editor runs Tier 0 and says so — no vendor is assumed.
 
