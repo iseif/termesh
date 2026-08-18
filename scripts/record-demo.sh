@@ -25,10 +25,12 @@ command -v vhs >/dev/null || fail "vhs is not installed (brew install vhs)"
 [[ -f site/demo.tape ]] || fail "site/demo.tape is missing"
 
 BIN="$ROOT/target/release/termesh"
-if [[ ! -x "$BIN" ]]; then
-  log "building termesh (release)"
-  cargo build --release --locked -p termesh
-fi
+# Always, never "only if missing". This script exists to produce evidence about what the
+# code does, and a stale binary makes it produce evidence about what the code used to do —
+# which is worse than no recording, because it looks exactly as convincing. Cargo is
+# incremental, so this costs a second when nothing has changed.
+log "building termesh (release)"
+cargo build --release --locked -p termesh
 
 # A fixed location, so the tape can name it and the recording shows a short, neutral path.
 PROJECT="${TMPDIR:-/tmp}/termesh-demo"
@@ -122,7 +124,39 @@ mkdir -p site/img
 # last run left open, which is exactly how an early take ended up showing a stale buffer.
 CONFIG="${TMPDIR:-/tmp}/termesh-demo-config"
 rm -rf "$CONFIG"
-mkdir -p "$CONFIG"
+mkdir -p "$CONFIG/termesh"
+
+# The throwaway config root cannot see the operator's agents.toml, and without an agent
+# there is no review to record — which is the one thing here nobody else has.
+#
+# It has to be an agent that *asks before editing*, or the recording shows a diff for a
+# change that already happened. That rules out copying whatever the operator uses day to
+# day: this picks a known-gating one deliberately (ADR-0016, docs/support.md).
+DEMO_AGENT_CMD="${TERMESH_DEMO_AGENT:-}"
+if [[ -z "$DEMO_AGENT_CMD" ]]; then
+  if command -v opencode >/dev/null 2>&1; then
+    DEMO_AGENT_CMD='"opencode", "acp"'
+  else
+    fail "no gating agent found. Install opencode, or set TERMESH_DEMO_AGENT to an argv
+      JSON fragment for one that asks before editing — e.g. TERMESH_DEMO_AGENT='\"codex-acp\"'.
+      See docs/support.md for which agents gate edits."
+  fi
+fi
+cat > "$CONFIG/termesh/agents.toml" <<TOML
+[agents.demo]
+command = [$DEMO_AGENT_CMD]
+TOML
+log "agent for the recording: [$DEMO_AGENT_CMD]"
+
+# And the agent has to *ask* before it edits, or the recording shows a diff for a change
+# that already happened, which is the opposite of the point (ADR-0016). opencode only asks
+# when told to; Codex asks whenever its session is left in read-only.
+cat > "$PROJECT/opencode.json" <<'JSON'
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": { "edit": "ask", "bash": "ask" }
+}
+JSON
 
 log "recording (this drives a real terminal; it takes a minute)"
 export TERMESH_BIN_DIR="$(dirname "$BIN")"
@@ -131,11 +165,11 @@ export DEMO_CONFIG="$CONFIG"
 vhs site/demo.tape
 
 [[ -s site/img/demo.gif ]] || fail "vhs produced no GIF"
-for still in site/img/diagnostics.png site/img/git.png; do
+for still in site/img/diagnostics.png site/img/git.png site/img/agent.png; do
   [[ -s "$still" ]] || fail "vhs produced no $still"
 done
 
 log "wrote:"
-for f in site/img/demo.gif site/img/diagnostics.png site/img/git.png; do
+for f in site/img/demo.gif site/img/diagnostics.png site/img/git.png site/img/agent.png; do
   printf '    %-28s %s\n' "$f" "$(du -h "$f" | cut -f1)"
 done

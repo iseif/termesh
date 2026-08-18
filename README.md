@@ -58,6 +58,12 @@ count in the status bar](site/img/diagnostics.png)
 ![the Git Changes overlay listing a modified file, with stage, commit and branch on the
 footer](site/img/git.png)
 
+![an agent asking permission to edit pricing.rs, the proposed line marked in the editor
+gutter, and accept/reject in the agent pane](site/img/agent.png)
+
+That last one is the whole point: the agent has asked, the change is marked in the gutter,
+and the file on disk has not been touched. `r` and it never is.
+
 Those are real screenshots, and so is the recording above — all three are produced by
 `./scripts/record-demo.sh`, which builds a throwaway project and drives the editor with real
 key chords, so they can be regenerated rather than going stale.

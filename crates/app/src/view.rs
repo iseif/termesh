@@ -791,12 +791,16 @@ fn agent_body(model: &Model) -> String {
         }
     }
 
+    // The proposal a permission is holding open is already introduced above, with its own
+    // accept/reject line. Printing a second one here asks the reader to decide twice.
+    let gated = agent.pending_permission.as_ref().and_then(|pending| pending.review);
     for proposal in &agent.proposals {
         let clean = proposal.applicable().count();
         let conflicts = proposal.hunks.len() - clean;
         let note = if conflicts > 0 { format!(", {conflicts} conflicted") } else { String::new() };
+        let keys = if gated == Some(proposal.id) { "" } else { "\u{258E} [a]ccept  [r]eject\n" };
         out.push_str(&format!(
-            "\u{258E} Proposed {} edit(s){note}\n\u{258E} in {}\n\u{258E} [a]ccept  [r]eject\n\n",
+            "\u{258E} Proposed {} edit(s){note}\n\u{258E} in {}\n{keys}\n",
             proposal.hunks.len(),
             proposal.path.file_name().unwrap_or_default().to_string_lossy(),
         ));

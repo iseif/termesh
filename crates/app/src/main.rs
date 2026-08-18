@@ -7333,6 +7333,59 @@ mod agent_tests {
         );
     }
 
+    /// opencode sends the same edit twice: as the permission that gates it, and again as a
+    /// `tool_call_update` describing the work. Captured from the wire. The second copy is an
+    /// ordinary proposal, so accepting it would make the client write a change the agent is
+    /// already writing — two reviews for one edit, one of them dangerous (ADR-0016 §2).
+    #[test]
+    fn an_edit_described_twice_is_reviewed_once() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_turn(vec![ScriptedUpdate::EditPermission {
+            summary: "Edit main.rs".into(),
+            path: "/proj/src/main.rs".into(),
+            old_text: ORIGINAL.into(),
+            new_text: IMPROVED.into(),
+        }]);
+        run_turn(&mut m, &mut agent);
+
+        // The agent now narrates the same change through the ordinary proposal path.
+        m.on_agent_event(AgentEvent::ProposedEdit {
+            session: SessionId::new(1),
+            proposal: termesh_core::ProposalId::new(9_001),
+            path: "/proj/src/main.rs".into(),
+            old_text: Some(ORIGINAL.into()),
+            new_text: IMPROVED.into(),
+        });
+
+        assert_eq!(m.agent.as_ref().expect("session").proposals.len(), 1, "one edit, one review");
+        let frame = view::snapshot(&mut m, 96, 28);
+        assert_eq!(frame.matches("[a]ccept").count(), 1, "and one place to answer it:\n{frame}");
+    }
+
+    /// The status line is cleared by `dispatch`, which an agent event does not go through,
+    /// so this message used to sit there for the rest of the run.
+    #[test]
+    fn the_starting_a_session_message_goes_away_when_the_session_starts() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        m.agent_name = Some("scripted".into());
+
+        m.dispatch(Command::Action(Action::AgentPrompt));
+        for c in "hello".chars() {
+            input::on_chord(&mut m, KeyChord::plain(Key::Char(c)));
+        }
+        input::on_chord(&mut m, KeyChord::plain(Key::Enter));
+        assert_eq!(
+            m.notification.as_deref(),
+            Some("starting an agent session\u{2026}"),
+            "it says what it is doing"
+        );
+
+        m.on_agent_event(AgentEvent::SessionStarted { session: SessionId::new(1) });
+        assert_eq!(m.notification, None, "and stops saying it once done");
+    }
+
     /// Codex's shape: the permission carries only the lines it is touching. Deriving hunks
     /// from that as though it were the whole document proposes replacing the file with two
     /// lines — which renders as a tidy diff and destroys the file on accept (ADR-0016 §1a).
@@ -7374,6 +7427,11 @@ mod agent_tests {
 
         let frame = view::snapshot(&mut m, 96, 28);
         assert!(frame.contains("[a]ccept"), "answered as a diff, not as a command:\n{frame}");
+        assert_eq!(
+            frame.matches("[a]ccept").count(),
+            1,
+            "asked to decide exactly once, not twice:\n{frame}"
+        );
         assert!(!frame.contains("allow once"), "no command vocabulary on an edit:\n{frame}");
         assert_eq!(m.agent.as_ref().expect("session").proposals.len(), 1, "one proposal");
     }

@@ -20,6 +20,16 @@ described in [docs/configuration.md](docs/configuration.md).
   deletes the rest on accept. A fragment that matches nowhere, or in more than one place, is
   reported as such instead of being placed at a guessed offset (ADR-0016 §1a).
 
+### Fixed
+
+- An edit an agent described twice — once as the permission gating it, once as a tool-call
+  update narrating it — produced two reviews for one change. The second was an ordinary
+  proposal, so accepting it would have made termesh write a file the agent was already writing.
+  opencode does exactly this; one edit is now one review.
+- `starting an agent session…` stayed in the status bar for the rest of the run. The line is
+  cleared when a command is dispatched, and an agent event is not a command, so the message
+  outlived the state it described.
+
 ## 0.1.4 — 2026-08-17
 
 ### Added

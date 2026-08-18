@@ -229,6 +229,14 @@
     </figure>
 
     <figure>
+      <img src="img/agent.png" alt="An agent asking permission to edit pricing.rs, with the
+      proposed line marked in the editor gutter and accept/reject in the agent pane"
+      loading="lazy">
+      <figcaption>The agent has asked; the change is marked in the gutter; the file on disk is
+      untouched. Reject and it stays that way — the review is a gate, not a notification.</figcaption>
+    </figure>
+
+    <figure>
       <img src="img/git.png" alt="The Git Changes overlay listing a modified file, with stage,
       unstage, commit and branch actions on the footer" loading="lazy">
       <figcaption>Git runs on its own worker and never blocks rendering. Commits use the index as

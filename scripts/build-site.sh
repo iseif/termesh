@@ -40,7 +40,7 @@ RENDER
 
 # The recording and stills need a real terminal to produce, which a CI runner rendering
 # this page does not have, so they are committed and copied rather than regenerated here.
-for asset in site/img/demo.gif site/img/diagnostics.png site/img/git.png; do
+for asset in site/img/demo.gif site/img/diagnostics.png site/img/git.png site/img/agent.png; do
   [[ -s "$asset" ]] || fail "$asset is missing — run ./scripts/record-demo.sh"
 done
 mkdir -p "$OUT/img"

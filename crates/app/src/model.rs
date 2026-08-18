@@ -388,6 +388,9 @@ pub enum PermissionOrigin {
 }
 
 /// A tool call the agent wants to run, shown before it runs (ARCHITECTURE.md §9.4).
+/// Shown while a session is opening, and cleared the moment one does.
+const STARTING_SESSION: &str = "starting an agent session\u{2026}";
+
 pub struct PendingPermission {
     pub origin: PermissionOrigin,
     pub summary: String,
@@ -3373,6 +3376,12 @@ impl Model {
                 }
             }
             AgentEvent::SessionStarted { session } => {
+                // The status line is cleared by `dispatch`, and an agent event does not go
+                // through it — so "starting an agent session…" outlived the starting and sat
+                // there for the rest of the run, describing a state that had ended.
+                if self.notification.as_deref() == Some(STARTING_SESSION) {
+                    self.notification = None;
+                }
                 if let Some(previous) = self.agent.as_ref().map(|agent| agent.id) {
                     self.cancel_agent_terminals(previous, "agent session replaced");
                 }
@@ -4334,6 +4343,28 @@ impl Model {
         old_text: Option<String>,
         new_text: String,
     ) {
+        // The same edit can arrive twice: once as the permission that gates it, and again
+        // as a `tool_call_update` describing what the agent is doing. Reviewing it twice is
+        // not just noise — the second copy is an ordinary proposal, so accepting it would
+        // make *us* write a change the agent is already writing (ADR-0016 §2).
+        let gated_here = self
+            .agent
+            .as_ref()
+            .and_then(|agent| agent.pending_permission.as_ref())
+            .and_then(|pending| pending.review)
+            .and_then(|reviewed| {
+                self.agent
+                    .as_ref()?
+                    .proposals
+                    .iter()
+                    .find(|proposal| proposal.id == reviewed)
+                    .map(|proposal| proposal.path == path)
+            })
+            .unwrap_or(false);
+        if gated_here {
+            return;
+        }
+
         let Some(index) = self.buffers.iter().position(|b| b.path() == Some(path.as_path())) else {
             // A proposal for a file we have not opened. Opening it is the right move —
             // review has to happen somewhere the human can see it — but that is a read
@@ -5280,7 +5311,7 @@ impl Model {
                 None => {
                     self.pending_prompt = Some(name);
                     self.new_agent_session();
-                    self.notification = Some("starting an agent session\u{2026}".into());
+                    self.notification = Some(STARTING_SESSION.into());
                 }
             }
             return;

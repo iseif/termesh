@@ -89,3 +89,53 @@ Sleep 1500ms
 Escape Sleep 1000ms
 
 Sleep 2s
+
+# --- the part nobody else has: the agent asks, you decide -------------------------
+# Reached with plain keys because VHS cannot send F4: in the agent pane Enter opens the
+# prompt, and an edit permission is answered with `a` or `r`.
+#
+# What this section is evidence for: the diff on screen is a change that has *not*
+# happened yet. Rejecting it leaves the file exactly as it was — which is only true
+# because the agent asked the client before writing, and is why the recorder configures
+# the agent to ask (ADR-0016).
+#
+# Every step here waits for the screen rather than sleeping at it. The prompt refuses to
+# open while a turn is running, and an earlier take typed a whole sentence into the agent
+# pane instead — where the letters are keybindings, so it answered prompts nobody saw.
+#
+# Back to the file with the mistake first, so the proposed diff lands where it can be seen
+# rather than in a tab nobody is looking at.
+Ctrl+p Sleep 800ms
+Type "pricing" Sleep 1000ms
+Enter Sleep 1800ms
+
+Tab Sleep 1200ms
+Enter
+Wait+Screen@30s /Ask the agent/
+Sleep 600ms
+Type "In src/pricing.rs add the doc comment /// Subtotal in cents. above fn subtotal"
+Sleep 800ms
+Enter
+
+# However long the model takes. What is waited for is the prompt, not a duration.
+Wait+Screen@300s /\[a\]ccept/
+Sleep 3s
+Screenshot site/img/agent.png
+Sleep 2500ms
+
+# Reject it. The agent never wrote, so there is nothing to undo.
+Type "r"
+Sleep 5s
+
+# And again, taking it this time. The prompt will not open until the turn has finished,
+# so wait for it rather than assuming.
+Enter
+Wait+Screen@120s /Ask the agent/
+Sleep 600ms
+Type "Please make that edit now"
+Sleep 600ms
+Enter
+Wait+Screen@300s /\[a\]ccept/
+Sleep 2500ms
+Type "a"
+Sleep 6s
