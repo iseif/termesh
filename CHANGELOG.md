@@ -4,7 +4,13 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
-## Unreleased
+## 0.1.5 — 2026-08-18
+
+Nothing in the configuration or on-disk format changed, so upgrading is just the binary. If you
+build *against* the crates rather than running them, note that `AgentEvent::PermissionRequested`
+carries a new field and `ScriptedUpdate` a new variant; both enums are exhaustive on purpose, so
+code matching them needs updating. That is a breaking change taken inside `0.1.x`, which the beta
+allows — see the support boundaries.
 
 ### Added
 
@@ -29,6 +35,18 @@ described in [docs/configuration.md](docs/configuration.md).
 - `starting an agent session…` stayed in the status bar for the rest of the run. The line is
   cleared when a command is dispatched, and an agent event is not a command, so the message
   outlived the state it described.
+
+### Install
+
+Prebuilt binaries for Linux (x86-64, AArch64), macOS (Intel, Apple Silicon) and Windows (x86-64)
+are attached to this release, with `SHA256SUMS`. The macOS builds are signed and notarized. From
+source:
+
+```bash
+cargo install termesh --locked
+```
+
+Requires Rust 1.88 or newer.
 
 ## 0.1.4 — 2026-08-17
 
