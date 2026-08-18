@@ -121,6 +121,19 @@ pub enum AgentRequest {
     Shutdown,
 }
 
+/// The before-and-after text of an edit an agent is asking permission to make.
+///
+/// `old_text` is what the agent believes it is replacing. It is **not** reliably the whole
+/// file: opencode sends the entire document, Codex sends only the lines it touches, and both
+/// arrive in the same `content[]` entry. Deciding which one came is the caller's job, because
+/// only the caller holds the buffer to compare against (ADR-0016 §1a).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProposedEditDiff {
+    pub path: PathBuf,
+    pub old_text: String,
+    pub new_text: String,
+}
+
 /// One entry from an agent's `availableModes`.
 ///
 /// `description` is the agent's own wording for what the mode permits, which is the only
@@ -194,6 +207,11 @@ pub enum AgentEvent {
         command: Vec<String>,
         /// Present only when raw ACP input supplied an exact structured command.
         terminal_spec: Option<TerminalSpec>,
+        /// The edit this permission would authorise, when the agent described one.
+        ///
+        /// An agent that asks before editing is an agent whose edits can be reviewed, so
+        /// this is what turns an "allow?" prompt into a diff (ADR-0016 §1).
+        edit: Option<ProposedEditDiff>,
     },
     TerminalRequest {
         session: SessionId,

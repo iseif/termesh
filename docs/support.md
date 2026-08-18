@@ -99,13 +99,27 @@ grammars are post-beta work.
   payload, not a request to write. The client's review path — proposal, per-hunk accept, rebase on
   a version conflict — is implemented and covered by the protocol and review-loop tests, and it
   engages for any agent that does route writes through the client. None of the ones above do.
-- **An agent that offers ACP session modes starts in whichever one it chose**, and termesh does not
-  change that for you. Codex opens `read-only` and declines to edit until you move the session with
-  `Agent: Session Mode` in the action palette; moving it to `auto` lets Codex edit, but — per the
-  table above — it still writes directly, so this buys you a working agent, not a reviewable one.
-  The current mode is shown in the Agent pane. Note that `codex-acp` answers `session/set_mode`
-  with a bare success and sends no `current_mode_update`, so the pane follows the success reply
-  (ADR-0015 §5).
+- **An agent that asks permission before editing can be reviewed, and two of them will.** This is
+  the path that works today. When a permission request describes the edit, termesh shows it as a
+  diff and your answer decides it: reject and the file is untouched, accept and the agent makes
+  the change. Verified by recording the session and comparing the file before and after.
+
+  | Agent | asks before editing | what to set |
+  |---|---|---|
+  | Codex | yes, in `read-only` | leave it in `read-only`; rejecting ends the turn, which is Codex's own option set |
+  | opencode | yes, once configured | `{ "permission": { "edit": "ask" } }` in `opencode.json` — without it, opencode edits unasked |
+  | JetBrains Junie | no — asks before running commands, not before editing | nothing available |
+
+  Accepting does **not** make termesh write the file: the agent does that itself, and the buffer
+  reloads when it lands. Per-hunk accept is not offered here, because a permission is one answer
+  for the whole edit (ADR-0016).
+- **The reviewable mode is the restrictive one, and it is not the default.** An agent that offers
+  ACP session modes starts in whichever one it chose, and termesh does not change that for you.
+  Codex opens `read-only`, which is the mode in which it asks before editing — so that is the mode
+  in which its edits can be reviewed. Moving it to `auto` with `Agent: Session Mode` lets it edit
+  without asking, which means without review. The current mode is shown in the Agent pane. Note
+  that `codex-acp` answers `session/set_mode` with a bare success and sends no
+  `current_mode_update`, so the pane follows the success reply (ADR-0015 §5).
 - An ACP agent session does not survive restart. The client restores workspaces, buffers, the
   active tab, pane geometry, terminal working directories, and read-only transcript history, then
   starts a fresh agent session. The implemented ACP baseline has no usable session-load path;

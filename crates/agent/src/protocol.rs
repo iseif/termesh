@@ -17,7 +17,8 @@ use serde_json::{json, Value};
 use termesh_core::{
     AgentCapabilities, AgentEvent, AgentRequest, AgentTerminalOperation, AgentTerminalRequestId,
     AgentTerminalResponse, PermissionDecision, PermissionRequestId, PromptCapabilities, ProposalId,
-    ReadRequestId, SessionId, SessionMode, StopReason, TerminalExit, TerminalId, TerminalSpec,
+    ProposedEditDiff, ReadRequestId, SessionId, SessionMode, StopReason, TerminalExit, TerminalId,
+    TerminalSpec,
 };
 
 use crate::jsonrpc::{Message, RequestIds};
@@ -597,6 +598,7 @@ impl Translator {
                     .to_string();
                 let command = argv_of(tool);
                 let terminal_spec = terminal_spec_of_permission(tool);
+                let edit = edit_diff_of_permission(tool);
 
                 self.next_id += 1;
                 let request = PermissionRequestId::new(self.next_id);
@@ -617,6 +619,7 @@ impl Translator {
                         summary,
                         command,
                         terminal_spec,
+                        edit,
                     }],
                     vec![],
                 )
@@ -741,6 +744,32 @@ fn terminal_spec_of_create(params: &Value) -> Result<TerminalSpec, String> {
         })?;
     let env = env_array(params.get("env"), false, "terminal/create env")?;
     Ok(TerminalSpec { program: program.into(), args, cwd, env })
+}
+
+/// The edit a permission request is asking to make, if it described one.
+///
+/// An agent that stops to ask before editing hands over the whole change in the request:
+/// Codex and opencode both put it in `toolCall.content[]` as a `diff` entry. Reading it is
+/// what lets the client show a diff instead of a bare "allow?" (ADR-0016 §1).
+///
+/// `oldText` is optional in the protocol and its *meaning* is not fixed — it may be the
+/// whole document or only the touched lines. This function does not try to tell which; that
+/// needs the buffer, which lives on the other side of the service boundary (ADR-0016 §1a).
+fn edit_diff_of_permission(tool: Option<&Value>) -> Option<ProposedEditDiff> {
+    let contents = tool?.get("content")?.as_array()?;
+    contents.iter().find_map(|content| {
+        if content.get("type").and_then(Value::as_str)? != "diff" {
+            return None;
+        }
+        Some(ProposedEditDiff {
+            path: PathBuf::from(content.get("path").and_then(Value::as_str)?),
+            // An absent `oldText` means the agent did not say what it was replacing. Treating
+            // that as "replaces nothing" would splice the new text in at position zero, so it
+            // is left empty and classified as unanchorable by the caller.
+            old_text: content.get("oldText").and_then(Value::as_str).unwrap_or("").to_string(),
+            new_text: content.get("newText").and_then(Value::as_str)?.to_string(),
+        })
+    })
 }
 
 fn terminal_spec_of_permission(tool: Option<&Value>) -> Option<TerminalSpec> {
@@ -1153,6 +1182,118 @@ mod tests {
             json!({"sessionUpdate": "current_mode_update", "modeId": "auto"}),
         ));
         assert_eq!(events.as_slice(), [AgentEvent::ModeChanged { session, mode: "auto".into() }]);
+    }
+
+    /// Both shapes below are the payloads real agents sent, reduced but not reshaped, so a
+    /// change in how the client reads `content[]` fails here rather than in a demo.
+    ///
+    /// Codex describes only the lines it touches. Whether that is a fragment is not decided
+    /// here — the buffer decides it, and the buffer is on the other side of the service
+    /// boundary (ADR-0016 §1a).
+    #[test]
+    fn an_edit_permission_from_codex_carries_the_change_it_wants_to_make() {
+        let (mut t, _) = connected();
+
+        let (events, _) = t.incoming(Message::Request {
+            id: 7,
+            method: "session/request_permission".into(),
+            params: json!({
+                "sessionId": "s-1",
+                "options": [
+                    { "optionId": "approved", "kind": "allow_once" },
+                    { "optionId": "abort", "kind": "reject_once" }
+                ],
+                "toolCall": {
+                    "toolCallId": "call_O0Jd",
+                    "kind": "edit",
+                    "status": "pending",
+                    "title": "Edit /proj/src/pricing.rs",
+                    "content": [{
+                        "type": "diff",
+                        "path": "/proj/src/pricing.rs",
+                        "oldText": "\npub fn vat(cart: &Cart) -> u32 {\n",
+                        "newText": "\n/// Total incl. VAT.\npub fn vat(cart: &Cart) -> u32 {\n"
+                    }]
+                }
+            }),
+        });
+
+        let Some(AgentEvent::PermissionRequested { edit: Some(edit), .. }) = events.first() else {
+            panic!("expected an edit permission, got {events:?}");
+        };
+        assert_eq!(edit.path, PathBuf::from("/proj/src/pricing.rs"));
+        assert!(edit.new_text.contains("/// Total incl. VAT."), "{edit:?}");
+        assert!(edit.old_text.contains("pub fn vat"), "{edit:?}");
+    }
+
+    /// opencode sends the entire document in the same field, and also a unified diff in
+    /// `rawInput` that we deliberately ignore — one source for the change, not two.
+    #[test]
+    fn an_edit_permission_from_opencode_carries_the_whole_document() {
+        let (mut t, _) = connected();
+        let before = "use crate::cart::Cart;\n\npub fn vat() -> u32 { 1 }\n";
+        let after = "use crate::cart::Cart;\n\n/// VAT.\npub fn vat() -> u32 { 1 }\n";
+
+        let (events, _) = t.incoming(Message::Request {
+            id: 8,
+            method: "session/request_permission".into(),
+            params: json!({
+                "sessionId": "s-1",
+                "options": [
+                    { "optionId": "once", "kind": "allow_once" },
+                    { "optionId": "always", "kind": "allow_always" },
+                    { "optionId": "reject", "kind": "reject_once" }
+                ],
+                "toolCall": {
+                    "toolCallId": "call_3bf0",
+                    "title": "/proj/src/pricing.rs",
+                    "kind": "edit",
+                    "status": "pending",
+                    "rawInput": { "filepath": "/proj/src/pricing.rs", "diff": "Index: ...\n@@ -1,3 +1,4 @@\n" },
+                    "content": [{
+                        "type": "diff",
+                        "path": "/proj/src/pricing.rs",
+                        "oldText": before,
+                        "newText": after
+                    }]
+                }
+            }),
+        });
+
+        let Some(AgentEvent::PermissionRequested { edit: Some(edit), command, .. }) =
+            events.first()
+        else {
+            panic!("expected an edit permission, got {events:?}");
+        };
+        assert_eq!(edit.old_text, before, "the document as the agent read it");
+        assert_eq!(edit.new_text, after);
+        assert!(command.is_empty(), "an edit is not a command: {command:?}");
+    }
+
+    /// The command case must not grow a diff it never had.
+    #[test]
+    fn a_command_permission_still_carries_no_edit() {
+        let (mut t, _) = connected();
+
+        let (events, _) = t.incoming(Message::Request {
+            id: 9,
+            method: "session/request_permission".into(),
+            params: json!({
+                "sessionId": "s-1",
+                "options": [{ "optionId": "o1", "kind": "allow_once" }],
+                "toolCall": {
+                    "title": "cargo check",
+                    "kind": "execute",
+                    "rawInput": { "command": ["cargo", "check"] }
+                }
+            }),
+        });
+
+        let Some(AgentEvent::PermissionRequested { edit, command, .. }) = events.first() else {
+            panic!("expected a permission, got {events:?}");
+        };
+        assert_eq!(*edit, None, "no edit was described");
+        assert_eq!(command, &["cargo", "check"]);
     }
 
     /// codex-acp answers `session/set_mode` with a bare `{}` and never sends

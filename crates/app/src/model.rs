@@ -393,6 +393,11 @@ pub struct PendingPermission {
     pub summary: String,
     /// Argv array. Never a shell string — we do not interpolate agent output into one.
     pub command: Vec<String>,
+    /// The proposal this permission is gating, when the agent described an edit we could
+    /// place in the buffer. Answering the permission *is* the decision: the agent does the
+    /// writing, so this proposal is displayed and then discarded, never applied
+    /// (ADR-0016 §2).
+    pub review: Option<ProposalId>,
 }
 
 struct PendingTerminalCreate {
@@ -3401,6 +3406,7 @@ impl Model {
                 summary,
                 command,
                 terminal_spec,
+                edit,
             } => {
                 // Every request leaves here with an answer. There is one prompt slot, so
                 // a request we cannot show has to be rejected on the spot — overwriting
@@ -3413,11 +3419,21 @@ impl Model {
                     .map(|agent| agent.pending_permission.is_some());
                 match busy {
                     Some(false) => {
+                        // An agent that stops to ask before editing is one whose edit can be
+                        // reviewed, so the diff is prepared before the prompt goes up. When it
+                        // cannot be placed, `summary` says why and the prompt stays a prompt —
+                        // an approval with no diff is worse than useless, but a *silent* one is
+                        // worse still (ADR-0016 §1a).
+                        let (review, summary) = match edit {
+                            Some(edit) => self.review_for_permission(request, edit, summary),
+                            None => (None, summary),
+                        };
                         if let Some(agent) = self.agent.as_mut() {
                             agent.pending_permission = Some(PendingPermission {
                                 origin: PermissionOrigin::AgentRequest { request, terminal_spec },
                                 summary,
                                 command,
+                                review,
                             });
                         }
                     }
@@ -3519,6 +3535,8 @@ impl Model {
                     spec,
                     output_byte_limit,
                 },
+                // Running a command is not an edit; there is nothing to diff.
+                review: None,
             });
             return;
         }
@@ -4028,6 +4046,35 @@ impl Model {
     /// "accept, undo" mean "undo the agent's change" rather than undo one hunk of it.
     /// Conflicted hunks are left behind for the human to resolve or re-ask about.
     fn resolve_proposal(&mut self, accept: bool) {
+        // A proposal the agent is holding a permission open for is not ours to apply. The
+        // agent writes it as soon as it is allowed to, so accepting here means answering
+        // that request — applying it as well would write the change twice, and the second
+        // writer would race our own watcher (ADR-0016 §2).
+        let gated = self
+            .agent
+            .as_ref()
+            .and_then(|agent| agent.pending_permission.as_ref())
+            .and_then(|pending| pending.review)
+            .filter(|reviewed| {
+                self.agent
+                    .as_ref()
+                    .and_then(|agent| agent.proposals.first())
+                    .is_some_and(|first| first.id == *reviewed)
+            });
+        if gated.is_some() {
+            self.decide_permission(if accept {
+                termesh_core::PermissionDecision::AllowOnce
+            } else {
+                termesh_core::PermissionDecision::RejectOnce
+            });
+            self.notification = Some(if accept {
+                "allowed — the agent is making the change".into()
+            } else {
+                "rejected — the file is untouched".into()
+            });
+            return;
+        }
+
         let Some(agent) = self.agent.as_mut() else {
             self.notification = Some("no agent session".into());
             return;
@@ -4105,6 +4152,15 @@ impl Model {
     pub fn decide_permission(&mut self, decision: termesh_core::PermissionDecision) {
         let Some(agent) = self.agent.as_mut() else { return };
         let Some(pending) = agent.pending_permission.take() else { return };
+
+        // The agent makes this edit itself the moment it is allowed to, so the client's copy
+        // of it is a display artefact and goes away with the prompt either way. Applying it
+        // on accept would write the same change twice (ADR-0016 §2).
+        if let Some(reviewed) = pending.review {
+            agent.proposals.retain(|proposal| proposal.id != reviewed);
+            self.sync_proposals();
+        }
+
         match pending.origin {
             PermissionOrigin::AgentRequest { request, terminal_spec } => {
                 if decision == termesh_core::PermissionDecision::AllowAlways {
@@ -4215,6 +4271,59 @@ impl Model {
             path: path.clone(),
         });
         self.outbox.push(FsRequest::ReadFile { buffer, path });
+    }
+
+    /// Prepare the diff behind an edit permission, so the human answers with the change in
+    /// front of them rather than a file path (ADR-0016 §1).
+    ///
+    /// Returns the proposal to display, if one could be built, and the summary to show —
+    /// which gains a reason whenever it could not. Nothing here writes: the agent performs
+    /// this edit itself once permitted, and applying it as well would write it twice
+    /// (ADR-0016 §2).
+    fn review_for_permission(
+        &mut self,
+        request: PermissionRequestId,
+        edit: termesh_core::ProposedEditDiff,
+        summary: String,
+    ) -> (Option<ProposalId>, String) {
+        let name = display_name(&edit.path);
+        let Some(index) = self.buffers.iter().position(|b| b.path() == Some(edit.path.as_path()))
+        else {
+            return (None, format!("{summary} (open {name} to see the diff)"));
+        };
+
+        let current = self.buffers[index].text().to_string();
+        let whole = match termesh_agent::whole_file_from_permission_diff(
+            &current,
+            &edit.old_text,
+            &edit.new_text,
+        ) {
+            Ok(whole) => whole,
+            // Never guess an offset. The human still has to answer, so say which kind of
+            // uncertainty this is: one means the file moved, the other means the agent's
+            // description fits more than one place in it.
+            Err(termesh_agent::AnchorFailure::NotFound) => {
+                return (None, format!("{summary} ({name} has changed since the agent read it)"));
+            }
+            Err(termesh_agent::AnchorFailure::Ambiguous) => {
+                return (None, format!("{summary} (the change matches several places in {name})"));
+            }
+        };
+
+        // The permission's own number, which the agent's id counter has already spent on
+        // this request and will not hand to a proposal. Minting from a second counter here
+        // would eventually collide with an agent-issued `ProposalId` and silently replace
+        // somebody else's pending review.
+        let id = ProposalId::new(request.0);
+        // Anchored against the buffer as it stands, so `old_text` is the buffer itself and
+        // the derived hunks are exactly the change under review.
+        let proposal = EditProposal::new(id, edit.path, None, current.clone(), whole, &current);
+
+        if let Some(agent) = self.agent.as_mut() {
+            agent.proposals.push(proposal);
+        }
+        self.sync_proposals();
+        (Some(id), summary)
     }
 
     /// Turn a whole-file diff into a reviewable proposal anchored onto the buffer.

@@ -4,6 +4,22 @@ Notable changes to termesh. Versions follow [semantic versioning](https://semver
 is a public beta, so the configuration schema may still change within the migration contract
 described in [docs/configuration.md](docs/configuration.md).
 
+## Unreleased
+
+### Added
+
+- **An agent that asks permission before editing now gets reviewed.** When a permission request
+  describes the change, termesh renders it as a diff in the editor and your answer decides it:
+  reject and the file is never touched, accept and the agent makes the change. This is the review
+  loop working against a real agent for the first time — Codex in `read-only` and opencode with
+  `permission.edit: "ask"` both stop and ask, and both honour a refusal. Accepting does not make
+  termesh write the file; the agent does that itself, so the change is written once (ADR-0016).
+- Permission diffs are anchored by inspection rather than assumption. opencode sends the whole
+  document and Codex sends only the lines it touches, both in the same field, and treating the
+  second as the first would propose replacing the file with a few lines — a tidy-looking diff that
+  deletes the rest on accept. A fragment that matches nowhere, or in more than one place, is
+  reported as such instead of being placed at a guessed offset (ADR-0016 §1a).
+
 ## 0.1.4 — 2026-08-17
 
 ### Added

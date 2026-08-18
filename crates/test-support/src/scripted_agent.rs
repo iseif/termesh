@@ -33,7 +33,8 @@ use termesh_agent::service::{
     AgentEvent, AgentIntegration, AgentRequest, AgentService, StopReason,
 };
 use termesh_core::{
-    AgentCapabilities, PermissionRequestId, ProposalId, ReadRequestId, SessionId, SessionMode,
+    AgentCapabilities, PermissionRequestId, ProposalId, ProposedEditDiff, ReadRequestId, SessionId,
+    SessionMode,
 };
 
 /// One thing the scripted agent does, in the order a real turn would do it.
@@ -56,6 +57,11 @@ pub enum ScriptedUpdate {
     Write { path: PathBuf, content: String },
     /// Ask permission to run a command.
     Permission { summary: String, command: Vec<String> },
+    /// Ask permission to *edit a file*, describing the change — what Codex in `read-only`
+    /// and opencode under `permission.edit: "ask"` do. `old_text` is deliberately free-form:
+    /// pass the whole document to model opencode, or just the touched lines to model Codex,
+    /// because the client has to handle both (ADR-0016 §1a).
+    EditPermission { summary: String, path: PathBuf, old_text: String, new_text: String },
     /// End the turn normally.
     End,
     /// End the turn some other way.
@@ -191,6 +197,18 @@ impl ScriptedAgent {
                         summary,
                         command,
                         terminal_spec: None,
+                        edit: None,
+                    });
+                }
+                ScriptedUpdate::EditPermission { summary, path, old_text, new_text } => {
+                    let request = PermissionRequestId::new(self.fresh_id());
+                    self.outbox.push_back(AgentEvent::PermissionRequested {
+                        session,
+                        request,
+                        summary,
+                        command: Vec::new(),
+                        terminal_spec: None,
+                        edit: Some(ProposedEditDiff { path, old_text, new_text }),
                     });
                 }
                 ScriptedUpdate::End => self

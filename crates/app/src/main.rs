@@ -7333,6 +7333,141 @@ mod agent_tests {
         );
     }
 
+    /// Codex's shape: the permission carries only the lines it is touching. Deriving hunks
+    /// from that as though it were the whole document proposes replacing the file with two
+    /// lines — which renders as a tidy diff and destroys the file on accept (ADR-0016 §1a).
+    #[test]
+    fn an_edit_permission_describing_only_the_touched_lines_keeps_the_rest_of_the_file() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_turn(vec![ScriptedUpdate::EditPermission {
+            summary: "Edit main.rs".into(),
+            path: "/proj/src/main.rs".into(),
+            old_text: "    todo!()\n".into(),
+            new_text: "    println!(\"hi\");\n".into(),
+        }]);
+        run_turn(&mut m, &mut agent);
+
+        let proposal = m.agent.as_ref().expect("session").proposals.first().expect("a proposal");
+        let applied: String = {
+            let mut text = ORIGINAL.to_string();
+            for hunk in proposal.hunks.iter().rev() {
+                text.replace_range(hunk.start..hunk.end, &hunk.text);
+            }
+            text
+        };
+        assert_eq!(applied, IMPROVED, "the fragment was spliced, not swapped for the file");
+    }
+
+    /// opencode's shape: `oldText` is the whole document. Same field, different meaning.
+    #[test]
+    fn an_edit_permission_carrying_the_whole_file_is_reviewed_too() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_turn(vec![ScriptedUpdate::EditPermission {
+            summary: "Edit main.rs".into(),
+            path: "/proj/src/main.rs".into(),
+            old_text: ORIGINAL.into(),
+            new_text: IMPROVED.into(),
+        }]);
+        run_turn(&mut m, &mut agent);
+
+        let frame = view::snapshot(&mut m, 96, 28);
+        assert!(frame.contains("[a]ccept"), "answered as a diff, not as a command:\n{frame}");
+        assert!(!frame.contains("allow once"), "no command vocabulary on an edit:\n{frame}");
+        assert_eq!(m.agent.as_ref().expect("session").proposals.len(), 1, "one proposal");
+    }
+
+    /// The agent performs this edit itself once allowed. Applying it here as well would
+    /// write the same change twice (ADR-0016 §2).
+    #[test]
+    fn allowing_an_edit_permission_answers_the_agent_and_writes_nothing() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_turn(vec![ScriptedUpdate::EditPermission {
+            summary: "Edit main.rs".into(),
+            path: "/proj/src/main.rs".into(),
+            old_text: "    todo!()\n".into(),
+            new_text: "    println!(\"hi\");\n".into(),
+        }]);
+        run_turn(&mut m, &mut agent);
+
+        m.focus = Pane::Agent;
+        input::on_chord(&mut m, KeyChord::plain(Key::Char('a')));
+
+        let answered = m.take_agent_requests();
+        assert!(
+            answered.iter().any(|r| matches!(
+                r,
+                AgentRequest::Permission {
+                    decision: termesh_core::PermissionDecision::AllowOnce,
+                    ..
+                }
+            )),
+            "the agent is told yes: {answered:?}"
+        );
+        assert_eq!(
+            m.buffers[0].text().to_string(),
+            ORIGINAL,
+            "the client did not make the edit — the agent does that"
+        );
+        assert!(m.agent.as_ref().expect("session").proposals.is_empty(), "the prompt is gone");
+    }
+
+    #[test]
+    fn rejecting_an_edit_permission_leaves_the_buffer_alone() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_turn(vec![ScriptedUpdate::EditPermission {
+            summary: "Edit main.rs".into(),
+            path: "/proj/src/main.rs".into(),
+            old_text: "    todo!()\n".into(),
+            new_text: "    println!(\"hi\");\n".into(),
+        }]);
+        run_turn(&mut m, &mut agent);
+
+        m.focus = Pane::Agent;
+        input::on_chord(&mut m, KeyChord::plain(Key::Char('r')));
+
+        let answered = m.take_agent_requests();
+        assert!(
+            answered.iter().any(|r| matches!(
+                r,
+                AgentRequest::Permission {
+                    decision: termesh_core::PermissionDecision::RejectOnce,
+                    ..
+                }
+            )),
+            "the agent is told no: {answered:?}"
+        );
+        assert_eq!(m.buffers[0].text().to_string(), ORIGINAL, "nothing reached the buffer");
+    }
+
+    /// Never guess an offset. The human still has to answer, so the prompt says why there
+    /// is no diff rather than showing one placed somewhere plausible (ADR-0016 §1a).
+    #[test]
+    fn an_edit_the_buffer_has_moved_under_is_prompted_without_a_guessed_diff() {
+        let fs = workspace();
+        let mut m = opened(&fs);
+        let mut agent = ScriptedAgent::new().with_turn(vec![ScriptedUpdate::EditPermission {
+            summary: "Edit main.rs".into(),
+            path: "/proj/src/main.rs".into(),
+            old_text: "fn shipping() -> u32 { 2 }\n".into(),
+            new_text: "fn shipping() -> u32 { 3 }\n".into(),
+        }]);
+        run_turn(&mut m, &mut agent);
+
+        assert!(
+            m.agent.as_ref().expect("session").proposals.is_empty(),
+            "no proposal was invented"
+        );
+        // The agent pane is a proportion of the width, so the reason wraps at any size —
+        // match a fragment that stays on one line rather than chasing a column count.
+        let frame = view::snapshot(&mut m, 200, 28);
+        assert!(frame.contains("since the agent read it"), "the prompt explains itself:\n{frame}");
+        assert!(!frame.contains("argv:"), "no invented command for an edit:\n{frame}");
+    }
+
     #[test]
     fn a_permission_request_shows_the_exact_command_before_it_runs() {
         let fs = workspace();
@@ -7489,6 +7624,7 @@ mod agent_tests {
             summary: "Delete everything?".into(),
             command: vec!["rm".into(), "-rf".into()],
             terminal_spec: None,
+            edit: None,
         });
 
         assert!(
@@ -7523,6 +7659,7 @@ mod agent_tests {
             summary: "Run something?".into(),
             command: vec!["ls".into()],
             terminal_spec: None,
+            edit: None,
         });
 
         assert!(
@@ -7820,6 +7957,7 @@ mod agent_tests {
             summary: "run tests".into(),
             command: vec!["cargo".into(), "test".into()],
             terminal_spec: Some(spec.clone()),
+            edit: None,
         });
 
         model.decide_permission(PermissionDecision::AllowAlways);
@@ -8044,6 +8182,7 @@ mod agent_tests {
             summary: "run a tool".into(),
             command: vec!["cargo".into(), "test".into()],
             terminal_spec: None,
+            edit: None,
         });
 
         model.on_agent_event(AgentEvent::TurnEnded {

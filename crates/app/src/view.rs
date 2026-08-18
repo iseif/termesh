@@ -753,29 +753,42 @@ fn agent_body(model: &Model) -> String {
     // top, and the reader never saw the thing they were being asked to decide.
     if let Some(pending) = &agent.pending_permission {
         out.push_str(&format!("\u{26A0} {}\n", pending.summary));
-        let spec = match &pending.origin {
-            crate::model::PermissionOrigin::AgentRequest { terminal_spec, .. } => {
-                terminal_spec.as_ref()
-            }
-            crate::model::PermissionOrigin::TerminalCreate { spec, .. } => Some(spec),
-        };
-        if let Some(spec) = spec {
-            out.push_str(&format!("  program: {:?}\n", spec.program));
-            for (index, argument) in spec.args.iter().enumerate() {
-                out.push_str(&format!("  arg[{index}]: {argument:?}\n"));
-            }
-            out.push_str(&format!("  cwd: {}\n", spec.cwd.display()));
-            for (name, value) in &spec.env {
-                out.push_str(&format!("  env {name:?}={value:?}\n"));
-            }
+
+        // An edit permission is answered in the vocabulary of the diff it gates, not of a
+        // command: there is no argv to show, and "always" is not offered, because standing
+        // permission to edit is the escalation the prompt exists to prevent. The change
+        // itself is on screen in the editor, marked in the gutter (ADR-0016 §4).
+        if pending.review.is_some() {
+            out.push_str("  [a]ccept  [r]eject \u{2014} the agent makes the change if allowed\n\n");
         } else {
-            out.push_str("  argv:");
-            for argument in &pending.command {
-                out.push_str(&format!(" {argument:?}"));
+            let spec = match &pending.origin {
+                crate::model::PermissionOrigin::AgentRequest { terminal_spec, .. } => {
+                    terminal_spec.as_ref()
+                }
+                crate::model::PermissionOrigin::TerminalCreate { spec, .. } => Some(spec),
+            };
+            if let Some(spec) = spec {
+                out.push_str(&format!("  program: {:?}\n", spec.program));
+                for (index, argument) in spec.args.iter().enumerate() {
+                    out.push_str(&format!("  arg[{index}]: {argument:?}\n"));
+                }
+                out.push_str(&format!("  cwd: {}\n", spec.cwd.display()));
+                for (name, value) in &spec.env {
+                    out.push_str(&format!("  env {name:?}={value:?}\n"));
+                }
+            } else {
+                // An edit whose diff could not be placed still needs an answer, and it
+                // has no argv — an empty "argv:" invents a command that does not exist.
+                if !pending.command.is_empty() {
+                    out.push_str("  argv:");
+                    for argument in &pending.command {
+                        out.push_str(&format!(" {argument:?}"));
+                    }
+                    out.push('\n');
+                }
             }
-            out.push('\n');
+            out.push_str("  [y] allow once  [A] always  [n] deny\n\n");
         }
-        out.push_str("  [y] allow once  [a] always  [n] deny\n\n");
     }
 
     for proposal in &agent.proposals {

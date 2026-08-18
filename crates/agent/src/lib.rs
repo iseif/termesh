@@ -32,7 +32,10 @@ pub mod protocol;
 pub mod service;
 
 pub use acp::AcpAgent;
-pub use proposal::{changeset_from_hunks, hunks_from_diff, rebase_hunks, EditProposal, Hunk};
+pub use proposal::{
+    changeset_from_hunks, hunks_from_diff, rebase_hunks, whole_file_from_permission_diff,
+    AnchorFailure, EditProposal, Hunk,
+};
 pub use service::{
     permission_for_review, AgentEvent, AgentIntegration, AgentRequest, AgentService,
     ClientCapabilities, NullAgent, PermissionDecision, ProposalDecision, StopReason,

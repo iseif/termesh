@@ -462,3 +462,123 @@ mod tests {
         assert_eq!(proposal.hunks[0].state, HunkState::Clean, "a conflict is not permanent");
     }
 }
+
+/// Why a fragment diff could not be placed in the buffer.
+///
+/// Both cases mean the same thing operationally — we do not know where the edit goes — but
+/// they are worth telling apart, because they tell the human different things about why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnchorFailure {
+    /// `old_text` is not in the buffer. The file moved under the agent.
+    NotFound,
+    /// `old_text` appears more than once. A short fragment matches in several places and
+    /// nothing in the payload says which was meant.
+    Ambiguous,
+}
+
+/// Rewrite a permission diff into the whole-file form the proposal machinery expects.
+///
+/// Agents disagree about what `oldText` means. opencode sends the entire document; Codex
+/// sends only the lines it is touching. Both arrive as `content[] type: "diff"` with the
+/// same two fields, so the shape has to be recovered by comparing against the buffer rather
+/// than trusted (ADR-0016 §1a). Getting this backwards is not a rendering bug: feeding a
+/// fragment to the whole-file derivation yields "replace the file with these few lines",
+/// which renders as a tidy diff and deletes the rest of the file on accept.
+///
+/// Returns the text the buffer would have if the edit were applied.
+pub fn whole_file_from_permission_diff(
+    current: &str,
+    old_text: &str,
+    new_text: &str,
+) -> Result<String, AnchorFailure> {
+    // The whole-file case: the agent handed back the document it read. Nothing to anchor.
+    if old_text == current {
+        return Ok(new_text.to_string());
+    }
+
+    // Anything else is a fragment, and an empty one names every position in the file.
+    if old_text.is_empty() {
+        return Err(AnchorFailure::Ambiguous);
+    }
+
+    let mut matches = current.match_indices(old_text);
+    let Some((at, _)) = matches.next() else {
+        return Err(AnchorFailure::NotFound);
+    };
+    if matches.next().is_some() {
+        return Err(AnchorFailure::Ambiguous);
+    }
+
+    let mut whole = String::with_capacity(current.len() + new_text.len());
+    whole.push_str(&current[..at]);
+    whole.push_str(new_text);
+    whole.push_str(&current[at + old_text.len()..]);
+    Ok(whole)
+}
+
+#[cfg(test)]
+mod permission_diff_tests {
+    use super::*;
+
+    const FILE: &str =
+        "use crate::cart::Cart;\n\npub fn subtotal() -> u32 { 0 }\n\npub fn vat() -> u32 { 1 }\n";
+
+    /// opencode's shape: `oldText` is the document, byte for byte.
+    #[test]
+    fn a_whole_file_diff_is_taken_as_the_new_document() {
+        let after = "use crate::cart::Cart;\n";
+        assert_eq!(whole_file_from_permission_diff(FILE, FILE, after), Ok(after.to_string()));
+    }
+
+    /// Codex's shape: a few lines, spliced in place. The rest of the file must survive —
+    /// this is the case that deletes a file if it is treated as whole-document text.
+    #[test]
+    fn a_fragment_is_spliced_and_the_rest_of_the_file_survives() {
+        let old = "pub fn vat() -> u32 { 1 }";
+        let new = "/// Total incl. VAT.\npub fn vat() -> u32 { 1 }";
+
+        let whole = whole_file_from_permission_diff(FILE, old, new).expect("anchors");
+
+        assert!(whole.starts_with("use crate::cart::Cart;"), "kept the head: {whole:?}");
+        assert!(whole.contains("pub fn subtotal"), "kept the untouched function: {whole:?}");
+        assert!(whole.contains("/// Total incl. VAT."), "made the edit: {whole:?}");
+        assert_eq!(whole.len(), FILE.len() + "/// Total incl. VAT.\n".len());
+    }
+
+    #[test]
+    fn a_fragment_that_is_not_there_reports_that_rather_than_guessing() {
+        let missing = "pub fn shipping() -> u32 { 2 }";
+        assert_eq!(
+            whole_file_from_permission_diff(FILE, missing, "anything"),
+            Err(AnchorFailure::NotFound)
+        );
+    }
+
+    /// Picking the first of several matches is how the wrong function gets edited.
+    #[test]
+    fn a_fragment_matching_twice_is_ambiguous_rather_than_the_first_one() {
+        let doubled = "fn f() {}\nfn g() {}\nfn f() {}\n";
+        assert_eq!(
+            whole_file_from_permission_diff(doubled, "fn f() {}", "fn h() {}"),
+            Err(AnchorFailure::Ambiguous)
+        );
+    }
+
+    #[test]
+    fn an_empty_fragment_names_every_position_so_it_is_ambiguous() {
+        assert_eq!(
+            whole_file_from_permission_diff(FILE, "", "hello"),
+            Err(AnchorFailure::Ambiguous)
+        );
+    }
+
+    /// An empty buffer with an empty `oldText` is the whole-file case, not the empty-fragment
+    /// one: the agent read nothing because there was nothing, and is writing the first draft.
+    #[test]
+    fn writing_the_first_content_into_an_empty_file_is_a_whole_file_diff() {
+        assert_eq!(
+            whole_file_from_permission_diff("", "", "fn main() {}"),
+            Ok("fn main() {}".into())
+        );
+    }
+}

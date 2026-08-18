@@ -19,7 +19,7 @@ pub mod terminal;
 
 pub use agent::{
     AgentCapabilities, AgentEvent, AgentRequest, PermissionDecision, PromptCapabilities,
-    SessionMode, StopReason,
+    ProposedEditDiff, SessionMode, StopReason,
 };
 pub use fs::{DirEntryInfo, EntryKind, FsError, FsEvent, FsRequest, FsResult};
 pub use git::{

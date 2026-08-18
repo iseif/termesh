@@ -29,6 +29,7 @@ before implementation. See [CONTRIBUTING.md](../../CONTRIBUTING.md).
 | [0013](0013-java-language-support.md) | Java support uses wrapper-owned JDT LS launch and conventional build tasks | Accepted |
 | [0014](0014-beta-hardening.md) | Beta hardening: layered config, offered-not-applied crash recovery, and a published ACP session-restore boundary | Accepted |
 | [0015](0015-acp-session-modes.md) | ACP session modes are surfaced and changed explicitly, never escalated for you | Accepted |
+| [0016](0016-edit-permission-review.md) | An edit the agent asks permission for is reviewed as a diff, not approved blind | Accepted |
 
 ## Reading the older ones
 
